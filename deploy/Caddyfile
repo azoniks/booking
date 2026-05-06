@@ -1,0 +1,40 @@
+# /etc/caddy/Caddyfile
+# Замените booking.example.ru на ваш реальный домен.
+# Caddy сам выпустит и продлит сертификат Let's Encrypt.
+
+booking.example.ru {
+    encode zstd gzip
+
+    # Ограничим размер upload (медиа объектов)
+    request_body {
+        max_size 30MB
+    }
+
+    # Long timeouts чтобы не обрывать загрузку файлов
+    reverse_proxy localhost:3000 {
+        transport http {
+            read_timeout 60s
+            write_timeout 60s
+        }
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+
+    # Безопасные заголовки
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "SAMEORIGIN"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+
+    log {
+        output file /var/log/caddy/booking.log {
+            roll_size 50mb
+            roll_keep 7
+        }
+        format json
+    }
+}

@@ -1,0 +1,258 @@
+// Prisma schema for hotel/spa booking system
+// Architecture: Category -> ObjectType -> BookingObject
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// === Категории (вкладки на главной) ===
+model Category {
+  id          String       @id @default(cuid())
+  name        String
+  slug        String       @unique
+  description String?
+  iconUrl     String?
+  sortOrder   Int          @default(0)
+  isVisible   Boolean      @default(true)
+  bookingMode BookingMode
+  objectTypes ObjectType[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([sortOrder])
+}
+
+enum BookingMode {
+  DAILY
+  HOURLY
+}
+
+// === Тип объекта ===
+model ObjectType {
+  id                String          @id @default(cuid())
+  categoryId        String
+  category          Category        @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  name              String
+  description       String?
+  // DAILY only:
+  checkInTime       String? // "14:00"
+  checkOutTime      String? // "12:00"
+  // HOURLY only:
+  hourlyStepMinutes Int?
+  workingHoursStart String? // "09:00"
+  workingHoursEnd   String? // "23:00"
+  minBookingHours   Int?            @default(1)
+  maxBookingHours   Int?
+  // common:
+  cleaningMinutes   Int             @default(0)
+  baseCapacity      Int
+  maxCapacity       Int
+  basePrice         Decimal         @db.Decimal(10, 2)
+  extraGuestPrice   Decimal         @default(0) @db.Decimal(10, 2)
+  // % предоплаты для этого типа. null = использовать глобальный из Settings.paymentPercent
+  paymentPercent    Int?
+  objects           BookingObject[]
+  slots             ObjectTypeSlot[]
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([categoryId])
+}
+
+// === Фиксированные слоты для HOURLY-типов (день/ночь/сутки) ===
+// Если у типа есть хотя бы один слот, на клиенте показывается их выбор
+// вместо свободной сетки часов.
+// Если endTime <= startTime — слот переходит через полночь.
+model ObjectTypeSlot {
+  id            String     @id @default(cuid())
+  objectTypeId  String
+  objectType    ObjectType @relation(fields: [objectTypeId], references: [id], onDelete: Cascade)
+  name          String
+  startTime     String     // "09:00"
+  endTime       String     // "21:00" или "09:00" для ночного с переходом
+  priceOverride Decimal?   @db.Decimal(10, 2)
+  sortOrder     Int        @default(0)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  @@index([objectTypeId, sortOrder])
+}
+
+// === Конкретный объект ===
+model BookingObject {
+  id           String        @id @default(cuid())
+  objectTypeId String
+  objectType   ObjectType    @relation(fields: [objectTypeId], references: [id], onDelete: Restrict)
+  name         String
+  slug         String        @unique
+  description  String?
+  status       ObjectStatus  @default(ACTIVE)
+  sortOrder    Int           @default(0)
+  media        ObjectMedia[]
+  bookings     Booking[]
+  blocks       ObjectBlock[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([objectTypeId, status])
+}
+
+enum ObjectStatus {
+  ACTIVE
+  HIDDEN
+  MAINTENANCE
+}
+
+// === Медиа ===
+model ObjectMedia {
+  id        String        @id @default(cuid())
+  objectId  String
+  object    BookingObject @relation(fields: [objectId], references: [id], onDelete: Cascade)
+  type      MediaType
+  url       String
+  thumbUrl  String?
+  isMain    Boolean       @default(false)
+  sortOrder Int           @default(0)
+  createdAt DateTime      @default(now())
+
+  @@index([objectId])
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+  PANO360
+}
+
+// === Бронь ===
+model Booking {
+  id              String            @id @default(cuid())
+  publicCode      String            @unique
+  objectId        String
+  object          BookingObject     @relation(fields: [objectId], references: [id], onDelete: Restrict)
+  guestName       String
+  guestEmail      String
+  guestPhone      String
+  guestComment    String?
+  startAt         DateTime
+  endAt           DateTime
+  // endAt + cleaningMinutes — для индекса конфликтов
+  blockedUntil    DateTime
+  guestsCount     Int
+  extraGuests     Int               @default(0)
+  basePrice       Decimal           @db.Decimal(10, 2)
+  extraGuestsCost Decimal           @default(0) @db.Decimal(10, 2)
+  totalPrice      Decimal           @db.Decimal(10, 2)
+  // Сумма, которая оплачивается онлайн. Остаток = totalPrice - prepaymentAmount
+  // оплачивается на месте.
+  prepaymentAmount Decimal          @default(0) @db.Decimal(10, 2)
+  paymentPercent  Int               @default(100)
+  status          BookingStatus     @default(PENDING)
+  cancelReason    String?
+  reminderSentAt  DateTime?
+  // chat_id клиента в мессенджере (заполняется когда он жмёт /start у бота)
+  telegramChatId  String?
+  maxChatId       String?
+  payment         Payment?
+  notifications   NotificationLog[]
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  paidAt          DateTime?
+  cancelledAt     DateTime?
+
+  @@index([objectId, startAt, blockedUntil])
+  @@index([status])
+  @@index([startAt])
+}
+
+enum BookingStatus {
+  PENDING
+  PAID
+  CANCELLED
+  COMPLETED
+  NO_SHOW
+}
+
+// === Платёж ===
+model Payment {
+  id              String        @id @default(cuid())
+  bookingId       String        @unique
+  booking         Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  provider        String
+  externalId      String?
+  amount          Decimal       @db.Decimal(10, 2)
+  currency        String        @default("RUB")
+  status          PaymentStatus @default(PENDING)
+  confirmationUrl String?
+  rawPayload      Json?
+  createdAt       DateTime      @default(now())
+  paidAt          DateTime?
+
+  @@index([externalId])
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  CANCELED
+  FAILED
+  REFUNDED
+}
+
+// === Блокировка объекта (ремонт, личное использование) ===
+model ObjectBlock {
+  id        String        @id @default(cuid())
+  objectId  String
+  object    BookingObject @relation(fields: [objectId], references: [id], onDelete: Cascade)
+  startAt   DateTime
+  endAt     DateTime
+  reason    String?
+  createdBy String?
+  createdAt DateTime      @default(now())
+
+  @@index([objectId, startAt, endAt])
+}
+
+// === Админ ===
+model AdminUser {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  name         String
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+}
+
+// === Глобальные настройки ===
+model Settings {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}
+
+// === Лог уведомлений ===
+model NotificationLog {
+  id        String              @id @default(cuid())
+  bookingId String?
+  booking   Booking?            @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  channel   NotificationChannel
+  kind      String
+  recipient String
+  status    String
+  error     String?
+  sentAt    DateTime            @default(now())
+
+  @@index([bookingId])
+}
+
+enum NotificationChannel {
+  EMAIL
+  TELEGRAM
+  MAX
+}

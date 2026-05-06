@@ -1,0 +1,41 @@
+# /etc/systemd/system/booking.service
+# systemctl daemon-reload
+# systemctl enable --now booking
+# journalctl -u booking -f      # просмотр логов
+
+[Unit]
+Description=Hotel Booking (Next.js)
+After=network.target postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=booking
+Group=booking
+WorkingDirectory=/srv/booking
+Environment=NODE_ENV=production
+Environment=PORT=3000
+Environment=HOSTNAME=127.0.0.1
+EnvironmentFile=/srv/booking/.env
+
+# Сначала запускаем сборку, потом сервер. Билд кешируется в .next.
+ExecStartPre=/usr/bin/npx prisma migrate deploy
+ExecStart=/usr/bin/npm run start
+
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=30s
+
+# Жёсткие лимиты
+LimitNOFILE=65535
+MemoryMax=1G
+
+# Безопасность
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/booking/public/uploads /srv/booking/.next
+
+[Install]
+WantedBy=multi-user.target
