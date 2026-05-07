@@ -10,10 +10,11 @@
   --rdp-day-height: 2.25rem;
   --rdp-day-width: 2.25rem;
 }
+/* Базовый disabled больше не красит цвет — это делает модификатор
+   (past = серым, booked = красным). Оставляем только курсор и
+   приглушение, чтобы клик визуально не выглядел доступным. */
 .rdp-disabled {
-  color: hsl(var(--muted-foreground)) !important;
-  opacity: 0.4;
-  text-decoration: line-through;
+  cursor: not-allowed;
 }
 .rdp-today:not(.rdp-selected) {
   font-weight: 700;

@@ -70,12 +70,13 @@ export function AvailabilityCalendar({
     [busy, cleaningMinutes],
   );
 
-  const isDisabled = (d: Date) => {
+  const isPast = (d: Date) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    if (d < today) return true;
-    return occupied.has(dateKey(d));
+    return d < today;
   };
+  const isBooked = (d: Date) => occupied.has(dateKey(d));
+  const isDisabled = (d: Date) => isPast(d) || isBooked(d);
 
   return (
     <div>
@@ -85,6 +86,14 @@ export function AvailabilityCalendar({
           selected={range}
           onSelect={onChange}
           disabled={isDisabled}
+          // Отдельные модификаторы, чтобы развести стили: «прошлое» — серым,
+          // «занято» — красным. Сами по себе модификаторы клик не блокируют,
+          // disabled выше отвечает за это.
+          modifiers={{ booked: isBooked, past: isPast }}
+          modifiersClassNames={{
+            booked: "bg-red-100 text-red-700 line-through",
+            past: "text-muted-foreground line-through opacity-50",
+          }}
           // resetOnSelect: клик при уже собранном диапазоне (или если range
           // прилетел извне как «комплектный») начинает новый диапазон с
           // выбранной даты, а не пытается расширить старый.
@@ -106,7 +115,10 @@ export function AvailabilityCalendar({
           <span className="inline-block w-3 h-3 rounded-sm bg-[hsl(var(--primary))]" /> выбрано
         </span>
         <span className="flex items-center gap-1">
-          <span className="inline-block w-3 h-3 rounded-sm bg-slate-200 line-through" /> занято/прошло
+          <span className="inline-block w-3 h-3 rounded-sm bg-red-100" /> занято
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="inline-block w-3 h-3 rounded-sm bg-slate-200" /> прошло
         </span>
       </div>
     </div>
