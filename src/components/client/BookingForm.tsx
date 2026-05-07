@@ -12,6 +12,25 @@ import { AvailabilityCalendar, type BusyInterval } from "./AvailabilityCalendar"
 import { HourlySlotsPicker } from "./HourlySlotsPicker";
 import { SlotPicker, type Slot } from "./SlotPicker";
 
+const dateFmt = new Intl.DateTimeFormat("ru-RU", {
+  weekday: "short",
+  day: "numeric",
+  month: "long",
+});
+const timeFmt = new Intl.DateTimeFormat("ru-RU", {
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+function plural(n: number, forms: [string, string, string]) {
+  const n10 = Math.abs(n) % 10;
+  const n100 = Math.abs(n) % 100;
+  if (n100 >= 11 && n100 <= 19) return forms[2];
+  if (n10 === 1) return forms[0];
+  if (n10 >= 2 && n10 <= 4) return forms[1];
+  return forms[2];
+}
+
 function CalendarHint() {
   const [open, setOpen] = useState(false);
   return (
@@ -211,6 +230,50 @@ export function BookingForm({ object }: { object: ObjectInfo }) {
     ? !!(slotDate && slotId)
     : startIdx !== null && endIdx !== null && endIdx > startIdx;
 
+  const summary = useMemo(() => {
+    if (isDaily) {
+      if (!range?.from || !range?.to) return null;
+      const nights = Math.max(
+        1,
+        Math.round((range.to.getTime() - range.from.getTime()) / DAY_MS),
+      );
+      return {
+        kind: "daily" as const,
+        nights,
+        checkIn: range.from,
+        checkOut: range.to,
+        checkInTime: object.checkInTime || "14:00",
+        checkOutTime: object.checkOutTime || "12:00",
+      };
+    }
+    if (useSlots) {
+      if (!slotDate || !slotId) return null;
+      const slot = slots.find((s) => s.id === slotId);
+      if (!slot) return null;
+      return { kind: "slot" as const, date: slotDate, slot };
+    }
+    if (startIdx === null || endIdx === null || endIdx <= startIdx) return null;
+    const startAt = hourlySlots[startIdx].date;
+    const endAt = hourlySlots[endIdx].date;
+    const hours = Math.max(
+      1,
+      Math.round((endAt.getTime() - startAt.getTime()) / HOUR_MS),
+    );
+    return { kind: "hourly" as const, hours, startAt, endAt };
+  }, [
+    isDaily,
+    useSlots,
+    range,
+    slotDate,
+    slotId,
+    slots,
+    startIdx,
+    endIdx,
+    hourlySlots,
+    object.checkInTime,
+    object.checkOutTime,
+  ]);
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
@@ -327,6 +390,76 @@ export function BookingForm({ object }: { object: ObjectInfo }) {
               />
             </div>
           )}
+
+          <div className="rounded-md border bg-muted/30 p-3 text-sm">
+            <div className="font-semibold mb-1.5">Ваш выбор</div>
+            {summary ? (
+              summary.kind === "daily" ? (
+                <div className="space-y-1">
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">Заезд</span>
+                    <span className="text-right">
+                      {dateFmt.format(summary.checkIn)}, {summary.checkInTime}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">Выезд</span>
+                    <span className="text-right">
+                      {dateFmt.format(summary.checkOut)}, {summary.checkOutTime}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-2 border-t pt-1.5 mt-1.5 font-medium">
+                    <span>Длительность</span>
+                    <span>
+                      {summary.nights} {plural(summary.nights, ["ночь", "ночи", "ночей"])}
+                    </span>
+                  </div>
+                </div>
+              ) : summary.kind === "hourly" ? (
+                <div className="space-y-1">
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">Начало</span>
+                    <span className="text-right">
+                      {dateFmt.format(summary.startAt)}, {timeFmt.format(summary.startAt)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">Окончание</span>
+                    <span className="text-right">
+                      {dateFmt.format(summary.endAt)}, {timeFmt.format(summary.endAt)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-2 border-t pt-1.5 mt-1.5 font-medium">
+                    <span>Длительность</span>
+                    <span>
+                      {summary.hours} {plural(summary.hours, ["час", "часа", "часов"])}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">Дата</span>
+                    <span className="text-right">{dateFmt.format(summary.date)}</span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">Слот</span>
+                    <span className="text-right">
+                      {summary.slot.name} ({summary.slot.startTime}–{summary.slot.endTime})
+                    </span>
+                  </div>
+                </div>
+              )
+            ) : (
+              <div className="text-xs text-muted-foreground">
+                {isDaily
+                  ? "Выберите дату заезда (один клик — одна ночь, два клика — несколько ночей)"
+                  : useSlots
+                  ? "Выберите дату и слот"
+                  : "Выберите дату и интервал времени"}
+              </div>
+            )}
+          </div>
 
           <div>
             <Label>Гостей</Label>
