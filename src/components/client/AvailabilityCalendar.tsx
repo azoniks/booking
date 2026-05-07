@@ -77,32 +77,24 @@ export function AvailabilityCalendar({
     return occupied.has(dateKey(d));
   };
 
-  function handleSelect(next: DateRange | undefined) {
-    if (!next?.from || !next.to) {
-      onChange(next);
-      return;
-    }
-    // Проверяем нет ли занятых дат внутри диапазона
-    const cur = new Date(next.from);
-    while (cur < next.to) {
-      if (occupied.has(dateKey(cur))) {
-        // если внутри есть занятый день — оставить только заезд
-        onChange({ from: next.from, to: undefined });
-        return;
-      }
-      cur.setDate(cur.getDate() + 1);
-    }
-    onChange(next);
-  }
-
   return (
     <div>
       <div className="flex justify-center">
         <DayPicker
           mode="range"
           selected={range}
-          onSelect={handleSelect}
+          onSelect={onChange}
           disabled={isDisabled}
+          // resetOnSelect: клик при уже собранном диапазоне (или если range
+          // прилетел извне как «комплектный») начинает новый диапазон с
+          // выбранной даты, а не пытается расширить старый.
+          resetOnSelect
+          // excludeDisabled: если новый диапазон перекрывает занятый день —
+          // DayPicker сам сбрасывает «to» и оставляет триггер-дату как «from».
+          // Заменяет наш прежний ручной цикл, который молча уводил
+          // пользователя в {from, to: undefined} и выглядел как «ничего не
+          // происходит».
+          excludeDisabled
           locale={ru}
           weekStartsOn={1}
           showOutsideDays={false}

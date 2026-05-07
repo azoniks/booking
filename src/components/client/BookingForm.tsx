@@ -42,12 +42,6 @@ function todayMSK(): Date {
   return new Date(now.getFullYear(), now.getMonth(), now.getDate());
 }
 
-function tomorrowMSK(): Date {
-  const t = todayMSK();
-  t.setDate(t.getDate() + 1);
-  return t;
-}
-
 function buildSlots(date: Date, start: string, end: string, step: number) {
   const [sh, sm] = start.split(":").map(Number);
   const [eh, em] = end.split(":").map(Number);
@@ -70,11 +64,10 @@ export function BookingForm({ object }: { object: ObjectInfo }) {
   const isDaily = object.bookingMode === "DAILY";
   const minHours = Math.max(1, object.minBookingHours || 1);
 
-  // DAILY: range
-  const [range, setRange] = useState<DateRange | undefined>({
-    from: todayMSK(),
-    to: tomorrowMSK(),
-  });
+  // DAILY: range — стартуем без выбора, чтобы первый клик задавал «from»
+  // с чистого листа. Иначе DayPicker расширял предзаполненный today→tomorrow,
+  // и любой клик мимо этих дат тащил диапазон через занятые ночи.
+  const [range, setRange] = useState<DateRange | undefined>(undefined);
   // HOURLY (свободные часы): date + indices
   const [hourlyDate, setHourlyDate] = useState<Date | undefined>(todayMSK());
   const [startIdx, setStartIdx] = useState<number | null>(null);
