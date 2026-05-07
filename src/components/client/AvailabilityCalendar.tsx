@@ -78,13 +78,38 @@ export function AvailabilityCalendar({
   const isBooked = (d: Date) => occupied.has(dateKey(d));
   const isDisabled = (d: Date) => isPast(d) || isBooked(d);
 
+  function sameDay(a: Date, b: Date) {
+    return (
+      a.getFullYear() === b.getFullYear() &&
+      a.getMonth() === b.getMonth() &&
+      a.getDate() === b.getDate()
+    );
+  }
+
+  // Один клик = одна ночь (выезд утром следующего дня). Второй клик по
+  // другой дате расширяет диапазон до периода — это поведение DayPicker
+  // mode="range" «из коробки», resetOnSelect специально не включаем.
+  function handleSelect(next: DateRange | undefined) {
+    if (!next?.from) {
+      onChange(next);
+      return;
+    }
+    if (!next.to || sameDay(next.from, next.to)) {
+      const to = new Date(next.from);
+      to.setDate(to.getDate() + 1);
+      onChange({ from: next.from, to });
+      return;
+    }
+    onChange(next);
+  }
+
   return (
     <div>
       <div className="flex justify-center">
         <DayPicker
           mode="range"
           selected={range}
-          onSelect={onChange}
+          onSelect={handleSelect}
           disabled={isDisabled}
           // Отдельные модификаторы, чтобы развести стили: «прошлое» — серым,
           // «занято» — красным. Сами по себе модификаторы клик не блокируют,
@@ -94,15 +119,9 @@ export function AvailabilityCalendar({
             booked: "bg-red-100 text-red-700 line-through",
             past: "text-muted-foreground line-through opacity-50",
           }}
-          // resetOnSelect: клик при уже собранном диапазоне (или если range
-          // прилетел извне как «комплектный») начинает новый диапазон с
-          // выбранной даты, а не пытается расширить старый.
-          resetOnSelect
           // excludeDisabled: если новый диапазон перекрывает занятый день —
-          // DayPicker сам сбрасывает «to» и оставляет триггер-дату как «from».
-          // Заменяет наш прежний ручной цикл, который молча уводил
-          // пользователя в {from, to: undefined} и выглядел как «ничего не
-          // происходит».
+          // DayPicker сам сбрасывает «to» и оставляет триггер-дату как «from»,
+          // которую handleSelect ниже превратит в 1-ночную бронь.
           excludeDisabled
           locale={ru}
           weekStartsOn={1}

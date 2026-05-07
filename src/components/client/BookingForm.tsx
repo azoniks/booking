@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import type { DateRange } from "react-day-picker";
+import { Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,6 +11,34 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AvailabilityCalendar, type BusyInterval } from "./AvailabilityCalendar";
 import { HourlySlotsPicker } from "./HourlySlotsPicker";
 import { SlotPicker, type Slot } from "./SlotPicker";
+
+function CalendarHint() {
+  const [open, setOpen] = useState(false);
+  return (
+    <span className="relative inline-flex align-middle">
+      <button
+        type="button"
+        aria-label="Подсказка по выбору дат"
+        onClick={() => setOpen((o) => !o)}
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+        className="inline-flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <Info className="h-4 w-4" />
+      </button>
+      {open && (
+        <span
+          role="tooltip"
+          className="absolute left-1/2 top-full z-20 mt-1 w-64 -translate-x-1/2 rounded-md border bg-background p-2 text-xs leading-relaxed text-foreground shadow-md"
+        >
+          Кликните на день — забронируем одну ночь (выезд утром следующего
+          дня). Чтобы выбрать несколько ночей, кликните день заезда, потом
+          день выезда.
+        </span>
+      )}
+    </span>
+  );
+}
 
 type ObjectInfo = {
   id: string;
@@ -243,7 +272,10 @@ export function BookingForm({ object }: { object: ObjectInfo }) {
 
           {isDaily ? (
             <div>
-              <Label className="mb-2 block">Даты заезда и выезда</Label>
+              <Label className="mb-2 flex items-center gap-1.5">
+                Даты заезда и выезда
+                <CalendarHint />
+              </Label>
               <AvailabilityCalendar
                 busy={busy}
                 cleaningMinutes={0}
