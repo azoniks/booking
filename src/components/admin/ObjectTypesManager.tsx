@@ -56,9 +56,11 @@ export function ObjectTypesManager({
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function save(form: FormData, id?: string) {
+  async function save(form: FormData, categoryId: string, id?: string) {
     setError(null);
-    const categoryId = String(form.get("categoryId") || "");
+    // categoryId передаётся явно из локального state TypeForm: при редактировании
+    // <select> отрисован как disabled и FormData его пропускает, из-за чего
+    // mode скатывался в DAILY и обнулял HOURLY-поля у часовых типов.
     const cat = categories.find((c) => c.id === categoryId);
     const mode = cat?.bookingMode || "DAILY";
 
@@ -126,7 +128,7 @@ export function ObjectTypesManager({
           <CardContent className="p-4">
             <TypeForm
               categories={categories}
-              onSubmit={(fd) => save(fd)}
+              onSubmit={(fd, catId) => save(fd, catId)}
               onCancel={() => setCreating(false)}
             />
           </CardContent>
@@ -141,7 +143,7 @@ export function ObjectTypesManager({
                 <TypeForm
                   initial={t}
                   categories={categories}
-                  onSubmit={(fd) => save(fd, t.id)}
+                  onSubmit={(fd, catId) => save(fd, catId, t.id)}
                   onCancel={() => setEditing(null)}
                 />
               ) : (
@@ -312,7 +314,7 @@ function TypeForm({
 }: {
   initial?: Type;
   categories: Category[];
-  onSubmit: (fd: FormData) => void;
+  onSubmit: (fd: FormData, categoryId: string) => void;
   onCancel: () => void;
 }) {
   const [categoryId, setCategoryId] = useState(initial?.categoryId || categories[0]?.id || "");
@@ -323,7 +325,7 @@ function TypeForm({
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        onSubmit(new FormData(e.currentTarget));
+        onSubmit(new FormData(e.currentTarget), categoryId);
       }}
       className="grid grid-cols-1 md:grid-cols-3 gap-3"
     >
