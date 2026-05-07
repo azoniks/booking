@@ -10,16 +10,30 @@ booking.example.ru {
         max_size 30MB
     }
 
-    # Long timeouts чтобы не обрывать загрузку файлов
-    reverse_proxy localhost:3000 {
-        transport http {
-            read_timeout 60s
-            write_timeout 60s
+    # Загруженные клиентами файлы (фото объектов и т.п.) отдаём напрямую
+    # с диска. Next.js в production обслуживает только те файлы из public/,
+    # которые были на момент `next build` — runtime-загрузки он игнорирует,
+    # поэтому /uploads/* должен идти мимо него.
+    handle_path /uploads/* {
+        root * /srv/booking/public/uploads
+        file_server {
+            precompressed gzip
         }
-        header_up Host {host}
-        header_up X-Real-IP {remote_host}
-        header_up X-Forwarded-For {remote_host}
-        header_up X-Forwarded-Proto {scheme}
+        header Cache-Control "public, max-age=31536000, immutable"
+    }
+
+    # Всё остальное — на Next.js
+    handle {
+        reverse_proxy localhost:3000 {
+            transport http {
+                read_timeout 60s
+                write_timeout 60s
+            }
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
     }
 
     # Безопасные заголовки

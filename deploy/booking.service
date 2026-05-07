@@ -18,24 +18,30 @@ Environment=PORT=3000
 Environment=HOSTNAME=127.0.0.1
 EnvironmentFile=/srv/booking/.env
 
-# Сначала запускаем сборку, потом сервер. Билд кешируется в .next.
+# Прямой запуск next вместо `npm run start` — npm иногда не пробрасывает
+# SIGTERM детям, и старый процесс остаётся жить, занимая порт.
 ExecStartPre=/usr/bin/npx prisma migrate deploy
-ExecStart=/usr/bin/npm run start
+ExecStart=/srv/booking/node_modules/.bin/next start -p 3000
 
+KillMode=mixed
+KillSignal=SIGTERM
 Restart=on-failure
-RestartSec=5s
-TimeoutStopSec=30s
+RestartSec=10s
+TimeoutStopSec=20s
 
 # Жёсткие лимиты
 LimitNOFILE=65535
 MemoryMax=1G
 
-# Безопасность
+# Безопасность.
+# ProtectSystem=full защищает /usr, /boot, /efi (этого достаточно).
+# Не используем strict + ReadWritePaths: с ним Next.js не видит новые файлы
+# в public/uploads/, созданные после старта процесса (нюансы mount namespace),
+# и админ получает 404 на свежие загрузки.
 NoNewPrivileges=true
 PrivateTmp=true
-ProtectSystem=strict
+ProtectSystem=full
 ProtectHome=true
-ReadWritePaths=/srv/booking/public/uploads /srv/booking/.next
 
 [Install]
 WantedBy=multi-user.target
