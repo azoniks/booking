@@ -14,23 +14,34 @@ export type BusyInterval = { kind: "booking" | "block"; startAt: string; endAt: 
  */
 function collectOccupiedDays(intervals: BusyInterval[], cleaningMinutes: number): Set<string> {
   const out = new Set<string>();
+  // d * 86_400_000 уже соответствует UTC-полуночи нужного дня MSK-индекса —
+  // сдвигать ещё на TZ_OFFSET_MIN не нужно, иначе getUTCDate() уезжает на
+  // сутки назад и ключ Set-а перестаёт совпадать с dateKey() в isDisabled.
+  const fmt = (dayIdx: number): string => {
+    const dt = new Date(dayIdx * 86_400_000);
+    const y = dt.getUTCFullYear();
+    const m = String(dt.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(dt.getUTCDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
   for (const iv of intervals) {
     const start = new Date(iv.startAt);
-    // endAt из API уже включает буфер уборки. Для DAILY: чтобы дата выезда
-    // освобождалась — вычитаем cleaningMinutes (для номеров cleaning=0 обычно).
     const end = new Date(new Date(iv.endAt).getTime() - cleaningMinutes * 60_000);
-    // итерируем по локальным датам Europe/Moscow (UTC+3)
     const TZ_OFFSET_MIN = 180;
     const startMs = start.getTime() + TZ_OFFSET_MIN * 60_000;
     const endMs = end.getTime() + TZ_OFFSET_MIN * 60_000;
     const startDay = Math.floor(startMs / 86_400_000);
-    const endDay = Math.ceil(endMs / 86_400_000);
+    // Ceil вернул бы +1 для любого endAt НЕ в полночь и блокировал бы
+    // лишние сутки (день выезда). Используем floor: занимаем до дня выезда
+    // ИСКЛЮЧИТЕЛЬНО — в этот день уже можно заехать новой брони.
+    const endDay = Math.floor(endMs / 86_400_000);
     for (let d = startDay; d < endDay; d++) {
-      const dt = new Date(d * 86_400_000 - TZ_OFFSET_MIN * 60_000);
-      const y = dt.getUTCFullYear();
-      const m = String(dt.getUTCMonth() + 1).padStart(2, "0");
-      const day = String(dt.getUTCDate()).padStart(2, "0");
-      out.add(`${y}-${m}-${day}`);
+      out.add(fmt(d));
+    }
+    // Если бронь короче суток (start и end в один день) — всё равно
+    // пометим день брони занятым, чтобы он не оставался выбираемым.
+    if (startDay === endDay) {
+      out.add(fmt(startDay));
     }
   }
   return out;

@@ -1,12 +1,15 @@
 import { NextRequest } from "next/server";
 import { ok, fail } from "@/lib/api-utils";
-import { applyMockPayment, mockSign } from "@/lib/tinkoff";
+import { applyMockPayment, mockSign, getTinkoffConfig } from "@/lib/tinkoff";
 import { sendPaidNotifications } from "@/lib/notifications/email";
-import { env } from "@/lib/env";
 import { prisma } from "@/lib/db";
 
 export async function POST(req: NextRequest) {
-  if (!env.TINKOFF_TEST_MODE) return fail("Только в test mode", 400);
+  // Mock-режим определяется настройками в админке (Settings.tinkoffMode),
+  // не env-переменной — иначе после переключения в UI этот endpoint падал в 400.
+  const cfg = await getTinkoffConfig();
+  if (cfg.mode !== "mock") return fail("Mock-режим выключен в настройках", 400);
+
   const body = (await req.json()) as { bookingId?: string; sig?: string; succeeded?: boolean };
   const bookingId = String(body.bookingId || "");
   const sig = String(body.sig || "");
