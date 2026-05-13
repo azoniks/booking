@@ -6,15 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Trash2, Pencil } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { toast } from "@/components/ui/use-toast";
+import { useFormDirty } from "./_hooks";
 
 type Category = {
   id: string;
@@ -31,10 +26,8 @@ export function CategoriesManager({ initial }: { initial: Category[] }) {
   const router = useRouter();
   const [editing, setEditing] = useState<Category | null>(null);
   const [creating, setCreating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   async function save(form: FormData, id?: string) {
-    setError(null);
     const data = {
       name: form.get("name"),
       slug: form.get("slug") || undefined,
@@ -50,9 +43,10 @@ export function CategoriesManager({ initial }: { initial: Category[] }) {
     });
     const j = await res.json();
     if (!j.ok) {
-      setError(j.error || "Ошибка");
+      toast({ title: "Ошибка", description: j.error || "Не удалось сохранить", variant: "destructive" });
       return;
     }
+    toast({ title: id ? "Категория сохранена" : "Категория создана" });
     setEditing(null);
     setCreating(false);
     router.refresh();
@@ -63,9 +57,10 @@ export function CategoriesManager({ initial }: { initial: Category[] }) {
     const res = await fetch(`/api/admin/categories/${id}`, { method: "DELETE" });
     const j = await res.json();
     if (!j.ok) {
-      alert(j.error || "Ошибка");
+      toast({ title: "Ошибка", description: j.error || "Не удалось удалить", variant: "destructive" });
       return;
     }
+    toast({ title: "Категория удалена" });
     router.refresh();
   }
 
@@ -74,8 +69,6 @@ export function CategoriesManager({ initial }: { initial: Category[] }) {
       <div className="flex justify-between">
         <Button onClick={() => { setCreating(true); setEditing(null); }}>+ Новая категория</Button>
       </div>
-
-      {error && <p className="text-destructive text-sm">{error}</p>}
 
       {creating && (
         <CategoryForm onSubmit={(fd) => save(fd)} onCancel={() => setCreating(false)} />
@@ -134,8 +127,11 @@ function CategoryForm({
   onSubmit: (fd: FormData) => void;
   onCancel: () => void;
 }) {
+  const { dirty, formProps } = useFormDirty();
+  const isEdit = !!initial;
   return (
     <form
+      {...formProps}
       onSubmit={(e) => {
         e.preventDefault();
         onSubmit(new FormData(e.currentTarget));
@@ -159,6 +155,7 @@ function CategoryForm({
         <select
           name="bookingMode"
           defaultValue={initial?.bookingMode || "DAILY"}
+          onChange={formProps.onChange}
           className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
         >
           <option value="DAILY">Сутки (номера)</option>
@@ -180,7 +177,9 @@ function CategoryForm({
       </div>
       <div className="md:col-span-2 flex gap-2 justify-end">
         <Button type="button" variant="outline" onClick={onCancel}>Отмена</Button>
-        <Button type="submit">{initial ? "Сохранить" : "Создать"}</Button>
+        <Button type="submit" disabled={isEdit && !dirty}>
+          {isEdit ? "Сохранить" : "Создать"}
+        </Button>
       </div>
     </form>
   );

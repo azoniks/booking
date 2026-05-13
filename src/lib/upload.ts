@@ -12,10 +12,13 @@ const MAX_SIZE = 25 * 1024 * 1024; // 25MB
 
 export type MediaType = "IMAGE" | "VIDEO" | "PANO360";
 
+export type UploadKind = "object" | "objectType";
+
 export async function saveUpload(
   file: File,
-  objectId: string,
+  ownerId: string,
   type: MediaType,
+  kind: UploadKind = "object",
 ): Promise<{ url: string }> {
   if (file.size > MAX_SIZE) {
     throw new Error(`Файл больше ${MAX_SIZE / 1024 / 1024} МБ`);
@@ -24,10 +27,11 @@ export async function saveUpload(
   if (!ALLOWED[type].includes(ext)) {
     throw new Error(`Недопустимое расширение для ${type}: ${ext}`);
   }
-  const dir = join(ROOT, objectId);
+  const subdir = kind === "objectType" ? join("types", ownerId) : ownerId;
+  const dir = join(ROOT, subdir);
   await mkdir(dir, { recursive: true });
   const filename = `${randomBytes(8).toString("hex")}${ext}`;
   const buf = Buffer.from(await file.arrayBuffer());
   await writeFile(join(dir, filename), buf);
-  return { url: `/uploads/${objectId}/${filename}` };
+  return { url: `/uploads/${subdir.split(/[\\/]/).join("/")}/${filename}` };
 }

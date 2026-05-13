@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { toast } from "@/components/ui/use-toast";
 
 export function BookingActions({ id, status }: { id: string; status: string }) {
   const router = useRouter();
@@ -13,8 +14,12 @@ export function BookingActions({ id, status }: { id: string; status: string }) {
       body: JSON.stringify({ status: s }),
     });
     const j = await res.json();
-    if (!j.ok) alert(j.error || "Ошибка");
-    else router.refresh();
+    if (!j.ok) {
+      toast({ title: "Ошибка", description: j.error || "Не удалось изменить статус", variant: "destructive" });
+      return;
+    }
+    toast({ title: "Статус изменён" });
+    router.refresh();
   }
   return (
     <div className="flex flex-wrap gap-2">

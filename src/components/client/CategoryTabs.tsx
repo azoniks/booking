@@ -120,12 +120,19 @@ function TypeSection({
 }) {
   const priceFrom = Math.round(Number(t.basePrice));
 
-  // Все медиа всех объектов типа: главные первыми
-  const media: MediaItem[] = [];
+  // Все медиа всех объектов типа: главные первыми.
+  // Дедупликация по id — fallback с уровня типа может приехать в нескольких
+  // объектах одновременно с одинаковыми id.
+  const mediaMap = new Map<string, MediaItem>();
   for (const o of t.objects) {
     const sorted = [...o.media].sort((a, b) => Number(b.isMain) - Number(a.isMain));
-    for (const m of sorted) media.push({ id: m.id, type: m.type, url: m.url });
+    for (const m of sorted) {
+      if (!mediaMap.has(m.id)) {
+        mediaMap.set(m.id, { id: m.id, type: m.type, url: m.url });
+      }
+    }
   }
+  const media: MediaItem[] = Array.from(mediaMap.values());
 
   const meta: { icon: React.ReactNode; text: string }[] = [
     { icon: <Users className="w-4 h-4" />, text: `до ${t.maxCapacity} гостей` },

@@ -14,7 +14,12 @@ export default async function BookingPage({ params }: { params: Promise<{ object
   const obj = await prisma.bookingObject.findUnique({
     where: { id: objectId },
     include: {
-      objectType: { include: { category: true } },
+      objectType: {
+        include: {
+          category: true,
+          media: { orderBy: [{ isMain: "desc" }, { sortOrder: "asc" }] },
+        },
+      },
       media: { orderBy: [{ isMain: "desc" }, { sortOrder: "asc" }] },
     },
   });
@@ -87,7 +92,11 @@ export default async function BookingPage({ params }: { params: Promise<{ object
         <div className="grid grid-cols-1 lg:grid-cols-[1.6fr_1fr] gap-6 lg:items-start">
           <div className="space-y-4">
             <MediaSlider
-              items={obj.media.map((m) => ({ id: m.id, type: m.type, url: m.url }))}
+              items={(obj.media.length > 0 ? obj.media : t.media).map((m) => ({
+                id: m.id,
+                type: m.type,
+                url: m.url,
+              }))}
               alt={obj.name}
               aspect="16/10"
             />

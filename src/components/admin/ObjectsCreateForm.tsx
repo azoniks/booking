@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
+import { toast } from "@/components/ui/use-toast";
 
 export function ObjectsCreateForm({
   types,
@@ -14,7 +15,6 @@ export function ObjectsCreateForm({
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   if (types.length === 0) {
     return (
@@ -28,7 +28,6 @@ export function ObjectsCreateForm({
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setError(null);
     const fd = new FormData(e.currentTarget);
     const res = await fetch("/api/admin/objects", {
       method: "POST",
@@ -44,9 +43,10 @@ export function ObjectsCreateForm({
     });
     const j = await res.json();
     if (!j.ok) {
-      setError(j.error || "Ошибка");
+      toast({ title: "Ошибка", description: j.error || "Не удалось создать", variant: "destructive" });
       return;
     }
+    toast({ title: "Объект создан" });
     setOpen(false);
     router.refresh();
   }
@@ -85,7 +85,6 @@ export function ObjectsCreateForm({
             <Label>Порядок</Label>
             <Input name="sortOrder" type="number" defaultValue={0} />
           </div>
-          {error && <p className="text-destructive text-sm md:col-span-3">{error}</p>}
           <div className="md:col-span-3 flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>Отмена</Button>
             <Button type="submit">Создать</Button>

@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatLocal } from "@/lib/time";
+import { toast } from "@/components/ui/use-toast";
 
 type Admin = {
   id: string;
@@ -26,11 +27,9 @@ export function AdminsManager({
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   async function create(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setError(null);
     const fd = new FormData(e.currentTarget);
     const res = await fetch("/api/admin/admins", {
       method: "POST",
@@ -43,9 +42,10 @@ export function AdminsManager({
     });
     const j = await res.json();
     if (!j.ok) {
-      setError(j.error || "Ошибка");
+      toast({ title: "Ошибка", description: j.error || "Не удалось создать", variant: "destructive" });
       return;
     }
+    toast({ title: "Администратор создан" });
     setOpen(false);
     router.refresh();
   }
@@ -56,7 +56,13 @@ export function AdminsManager({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ isActive: !a.isActive }),
     });
-    if ((await res.json()).ok) router.refresh();
+    const j = await res.json();
+    if (!j.ok) {
+      toast({ title: "Ошибка", description: j.error || "Не удалось обновить", variant: "destructive" });
+      return;
+    }
+    toast({ title: a.isActive ? "Отключён" : "Включён" });
+    router.refresh();
   }
 
   async function resetPassword(id: string) {
@@ -67,7 +73,12 @@ export function AdminsManager({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ password: pw }),
     });
-    if ((await res.json()).ok) alert("Пароль изменён");
+    const j = await res.json();
+    if (!j.ok) {
+      toast({ title: "Ошибка", description: j.error || "Не удалось сменить пароль", variant: "destructive" });
+      return;
+    }
+    toast({ title: "Пароль изменён" });
   }
 
   return (
@@ -89,7 +100,6 @@ export function AdminsManager({
                 <Label>Пароль (мин 8)</Label>
                 <Input name="password" type="password" minLength={8} required />
               </div>
-              {error && <p className="text-destructive text-sm md:col-span-3">{error}</p>}
               <div className="md:col-span-3 flex justify-end gap-2">
                 <Button type="button" variant="outline" onClick={() => setOpen(false)}>Отмена</Button>
                 <Button type="submit">Создать</Button>

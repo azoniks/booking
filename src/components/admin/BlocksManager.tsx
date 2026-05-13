@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Trash2 } from "lucide-react";
 import { formatLocal } from "@/lib/time";
+import { toast } from "@/components/ui/use-toast";
 
 type Block = {
   id: string;
@@ -27,11 +28,9 @@ export function BlocksManager({
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   async function create(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setError(null);
     const fd = new FormData(e.currentTarget);
     const startLocal = String(fd.get("startAt"));
     const endLocal = String(fd.get("endAt"));
@@ -47,9 +46,10 @@ export function BlocksManager({
     });
     const j = await res.json();
     if (!j.ok) {
-      setError(j.error || "Ошибка");
+      toast({ title: "Ошибка", description: j.error || "Не удалось создать", variant: "destructive" });
       return;
     }
+    toast({ title: "Блокировка создана" });
     setOpen(false);
     router.refresh();
   }
@@ -57,7 +57,13 @@ export function BlocksManager({
   async function del(id: string) {
     if (!confirm("Удалить блокировку?")) return;
     const res = await fetch(`/api/admin/blocks/${id}`, { method: "DELETE" });
-    if ((await res.json()).ok) router.refresh();
+    const j = await res.json();
+    if (!j.ok) {
+      toast({ title: "Ошибка", description: j.error || "Не удалось удалить", variant: "destructive" });
+      return;
+    }
+    toast({ title: "Блокировка удалена" });
+    router.refresh();
   }
 
   return (
@@ -93,7 +99,6 @@ export function BlocksManager({
                 <Label>Причина</Label>
                 <Input name="reason" placeholder="Ремонт" />
               </div>
-              {error && <p className="text-destructive text-sm md:col-span-3">{error}</p>}
               <div className="md:col-span-3 flex gap-2 justify-end">
                 <Button type="button" variant="outline" onClick={() => setOpen(false)}>Отмена</Button>
                 <Button type="submit">Создать</Button>

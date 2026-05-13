@@ -9,6 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
+import { toast } from "@/components/ui/use-toast";
+import { useFormDirty } from "./_hooks";
 
 const MASK = "***";
 
@@ -17,13 +19,12 @@ type Initial = Record<string, unknown>;
 export function SettingsForm({ initial }: { initial: Initial }) {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
   const [tinkoffMode, setTinkoffMode] = useState<string>(String(initial.tinkoffMode ?? "mock"));
+  const { dirty, formProps, reset } = useFormDirty();
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setSaving(true);
-    setMsg(null);
     const fd = new FormData(e.currentTarget);
     const data: Record<string, unknown> = {
       siteName: fd.get("siteName") || "",
@@ -67,10 +68,11 @@ export function SettingsForm({ initial }: { initial: Initial }) {
     const j = await res.json();
     setSaving(false);
     if (!j.ok) {
-      setMsg(j.error || "Ошибка");
+      toast({ title: "Ошибка", description: j.error || "Не удалось сохранить", variant: "destructive" });
       return;
     }
-    setMsg("Сохранено");
+    toast({ title: "Сохранено" });
+    reset();
     router.refresh();
   }
 
@@ -87,7 +89,7 @@ export function SettingsForm({ initial }: { initial: Initial }) {
   const maxEnabled = initial.maxEnabled !== "false" && initial.maxEnabled !== undefined;
 
   return (
-    <form onSubmit={onSubmit} className="space-y-6">
+    <form {...formProps} onSubmit={onSubmit} className="space-y-6">
       <Tabs defaultValue="site" className="w-full">
         <TabsList className="w-full justify-start overflow-x-auto">
           <TabsTrigger value="site">Сайт</TabsTrigger>
@@ -371,9 +373,8 @@ export function SettingsForm({ initial }: { initial: Initial }) {
         </TabsContent>
       </Tabs>
 
-      <div className="flex items-center justify-between">
-        {msg && <span className="text-sm text-muted-foreground">{msg}</span>}
-        <Button type="submit" disabled={saving} className="ml-auto">
+      <div className="flex items-center justify-end">
+        <Button type="submit" disabled={saving || !dirty}>
           {saving ? "Сохранение…" : "Сохранить все настройки"}
         </Button>
       </div>

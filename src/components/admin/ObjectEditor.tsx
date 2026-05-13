@@ -10,6 +10,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Star, Trash2, Upload } from "lucide-react";
+import { toast } from "@/components/ui/use-toast";
+import { useFormDirty } from "./_hooks";
 
 type Media = {
   id: string;
@@ -39,12 +41,11 @@ export function ObjectEditor({
 }) {
   const router = useRouter();
   const fileInput = useRef<HTMLInputElement>(null);
-  const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const { dirty, formProps, reset } = useFormDirty();
 
   async function saveBasics(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setError(null);
     const fd = new FormData(e.currentTarget);
     const res = await fetch(`/api/admin/objects/${obj.id}`, {
       method: "PATCH",
@@ -59,9 +60,11 @@ export function ObjectEditor({
     });
     const j = await res.json();
     if (!j.ok) {
-      setError(j.error || "Ошибка");
+      toast({ title: "Ошибка", description: j.error || "Не удалось сохранить", variant: "destructive" });
       return;
     }
+    toast({ title: "Сохранено" });
+    reset();
     router.refresh();
   }
 
@@ -75,9 +78,10 @@ export function ObjectEditor({
     const j = await res.json();
     setUploading(false);
     if (!j.ok) {
-      alert(j.error || "Ошибка");
+      toast({ title: "Ошибка", description: j.error || "Не удалось загрузить", variant: "destructive" });
       return;
     }
+    toast({ title: "Загружено" });
     router.refresh();
   }
 
@@ -87,19 +91,36 @@ export function ObjectEditor({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ isMain: true }),
     });
-    if ((await res.json()).ok) router.refresh();
+    const j = await res.json();
+    if (!j.ok) {
+      toast({ title: "Ошибка", description: j.error || "Не удалось обновить", variant: "destructive" });
+      return;
+    }
+    router.refresh();
   }
 
   async function delMedia(mediaId: string) {
     if (!confirm("Удалить файл?")) return;
     const res = await fetch(`/api/admin/media/${mediaId}`, { method: "DELETE" });
-    if ((await res.json()).ok) router.refresh();
+    const j = await res.json();
+    if (!j.ok) {
+      toast({ title: "Ошибка", description: j.error || "Не удалось удалить", variant: "destructive" });
+      return;
+    }
+    toast({ title: "Файл удалён" });
+    router.refresh();
   }
 
   async function deleteObject() {
     if (!confirm("Удалить объект целиком? Это удалит все медиа.")) return;
     const res = await fetch(`/api/admin/objects/${obj.id}`, { method: "DELETE" });
-    if ((await res.json()).ok) router.push("/admin/objects");
+    const j = await res.json();
+    if (!j.ok) {
+      toast({ title: "Ошибка", description: j.error || "Не удалось удалить", variant: "destructive" });
+      return;
+    }
+    toast({ title: "Объект удалён" });
+    router.push("/admin/objects");
   }
 
   return (
@@ -121,7 +142,7 @@ export function ObjectEditor({
       <Card>
         <CardHeader><CardTitle>Основное</CardTitle></CardHeader>
         <CardContent>
-          <form onSubmit={saveBasics} className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <form {...formProps} onSubmit={saveBasics} className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div className="md:col-span-2">
               <Label>Название</Label>
               <Input name="name" defaultValue={obj.name} required />
@@ -131,6 +152,7 @@ export function ObjectEditor({
               <select
                 name="objectTypeId"
                 defaultValue={obj.objectTypeId}
+                onChange={formProps.onChange}
                 className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
               >
                 {types.map((t) => (
@@ -149,6 +171,7 @@ export function ObjectEditor({
               <select
                 name="status"
                 defaultValue={obj.status}
+                onChange={formProps.onChange}
                 className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
               >
                 <option value="ACTIVE">Активен</option>
@@ -160,9 +183,8 @@ export function ObjectEditor({
               <Label>Порядок</Label>
               <Input name="sortOrder" type="number" defaultValue={obj.sortOrder} />
             </div>
-            {error && <p className="text-destructive text-sm md:col-span-3">{error}</p>}
             <div className="md:col-span-3 flex justify-end">
-              <Button type="submit">Сохранить</Button>
+              <Button type="submit" disabled={!dirty}>Сохранить</Button>
             </div>
           </form>
         </CardContent>

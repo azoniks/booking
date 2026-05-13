@@ -58,10 +58,28 @@ model ObjectType {
   paymentPercent    Int?
   objects           BookingObject[]
   slots             ObjectTypeSlot[]
+  media             ObjectTypeMedia[]
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
 
   @@index([categoryId])
+}
+
+// === Медиа на уровне типа объекта ===
+// Используется как fallback на витрине, если у конкретного BookingObject
+// нет своих медиа.
+model ObjectTypeMedia {
+  id           String     @id @default(cuid())
+  objectTypeId String
+  objectType   ObjectType @relation(fields: [objectTypeId], references: [id], onDelete: Cascade)
+  type         MediaType
+  url          String
+  thumbUrl     String?
+  isMain       Boolean    @default(false)
+  sortOrder    Int        @default(0)
+  createdAt    DateTime   @default(now())
+
+  @@index([objectTypeId])
 }
 
 // === Фиксированные слоты для HOURLY-типов (день/ночь/сутки) ===

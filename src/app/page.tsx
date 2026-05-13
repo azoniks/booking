@@ -16,6 +16,7 @@ export default async function HomePage({
       include: {
         objectTypes: {
           include: {
+            media: { orderBy: [{ isMain: "desc" }, { sortOrder: "asc" }] },
             objects: {
               where: { status: "ACTIVE" },
               orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
@@ -77,18 +78,27 @@ export default async function HomePage({
                 maxCapacity: t.maxCapacity,
                 basePrice: t.basePrice.toString(),
                 extraGuestPrice: t.extraGuestPrice.toString(),
-                objects: t.objects.map((o) => ({
-                  id: o.id,
-                  name: o.name,
-                  slug: o.slug,
-                  description: o.description,
-                  media: o.media.map((m) => ({
+                objects: t.objects.map((o) => {
+                  const ownMedia = o.media.map((m) => ({
                     id: m.id,
                     type: m.type,
                     url: m.url,
                     isMain: m.isMain,
-                  })),
-                })),
+                  }));
+                  const typeFallback = t.media.map((m) => ({
+                    id: m.id,
+                    type: m.type,
+                    url: m.url,
+                    isMain: m.isMain,
+                  }));
+                  return {
+                    id: o.id,
+                    name: o.name,
+                    slug: o.slug,
+                    description: o.description,
+                    media: ownMedia.length > 0 ? ownMedia : typeFallback,
+                  };
+                }),
               })),
             }))}
           />

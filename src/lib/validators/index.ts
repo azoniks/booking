@@ -93,18 +93,15 @@ export const adminUpdateSchema = z.object({
 
 export const settingsUpdateSchema = z.record(z.string(), z.any());
 
-export const slotCreateSchema = z
-  .object({
-    name: z.string().min(1).max(50),
-    startTime: HHMM,
-    endTime: HHMM,
-    priceOverride: z.coerce.number().nonnegative().optional().nullable(),
-    sortOrder: z.coerce.number().int().default(0),
-  })
-  .refine((d) => d.startTime !== d.endTime, {
-    message: "startTime и endTime не должны совпадать",
-    path: ["endTime"],
-  });
+// startTime === endTime трактуется как суточный слот через полночь
+// (booking-service ставит endAt на следующий день при endTime <= startTime).
+export const slotCreateSchema = z.object({
+  name: z.string().min(1).max(50),
+  startTime: HHMM,
+  endTime: HHMM,
+  priceOverride: z.coerce.number().nonnegative().optional().nullable(),
+  sortOrder: z.coerce.number().int().default(0),
+});
 
 export const slotUpdateSchema = z
   .object({

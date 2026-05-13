@@ -11,6 +11,7 @@ export default async function ObjectTypesPage() {
         category: true,
         _count: { select: { objects: true } },
         slots: { orderBy: [{ sortOrder: "asc" }, { startTime: "asc" }] },
+        media: { orderBy: [{ isMain: "desc" }, { sortOrder: "asc" }] },
       },
     }),
     prisma.category.findMany({ orderBy: { name: "asc" } }),
@@ -51,6 +52,13 @@ export default async function ObjectTypesPage() {
             endTime: s.endTime,
             priceOverride: s.priceOverride ? s.priceOverride.toString() : null,
             sortOrder: s.sortOrder,
+          })),
+          media: t.media.map((m) => ({
+            id: m.id,
+            type: m.type,
+            url: m.url,
+            isMain: m.isMain,
+            sortOrder: m.sortOrder,
           })),
         }))}
         categories={categories.map((c) => ({ id: c.id, name: c.name, bookingMode: c.bookingMode }))}

@@ -1,13 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { Trash2, Pencil } from "lucide-react";
+import { Trash2, Pencil, Upload, Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { toast } from "@/components/ui/use-toast";
+import { useFormDirty } from "./_hooks";
 
 export type Slot = {
   id: string;
@@ -15,6 +17,14 @@ export type Slot = {
   startTime: string;
   endTime: string;
   priceOverride: string | null;
+  sortOrder: number;
+};
+
+export type TypeMedia = {
+  id: string;
+  type: "IMAGE" | "VIDEO" | "PANO360";
+  url: string;
+  isMain: boolean;
   sortOrder: number;
 };
 
@@ -40,6 +50,7 @@ type Type = {
   paymentPercent: number | null;
   objectsCount: number;
   slots: Slot[];
+  media: TypeMedia[];
 };
 
 type Category = { id: string; name: string; bookingMode: "DAILY" | "HOURLY" };
@@ -54,10 +65,8 @@ export function ObjectTypesManager({
   const router = useRouter();
   const [editing, setEditing] = useState<Type | null>(null);
   const [creating, setCreating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   async function save(form: FormData, categoryId: string, id?: string) {
-    setError(null);
     // categoryId передаётся явно из локального state TypeForm: при редактировании
     // <select> отрисован как disabled и FormData его пропускает, из-за чего
     // mode скатывался в DAILY и обнулял HOURLY-поля у часовых типов.
@@ -102,9 +111,10 @@ export function ObjectTypesManager({
     });
     const j = await res.json();
     if (!j.ok) {
-      setError(j.error || "Ошибка");
+      toast({ title: "Ошибка", description: j.error || "Не удалось сохранить", variant: "destructive" });
       return;
     }
+    toast({ title: id ? "Тип сохранён" : "Тип создан" });
     setEditing(null);
     setCreating(false);
     router.refresh();
@@ -114,14 +124,17 @@ export function ObjectTypesManager({
     if (!confirm("Удалить тип объекта?")) return;
     const res = await fetch(`/api/admin/object-types/${id}`, { method: "DELETE" });
     const j = await res.json();
-    if (!j.ok) alert(j.error || "Ошибка");
+    if (!j.ok) {
+      toast({ title: "Ошибка", description: j.error || "Не удалось удалить", variant: "destructive" });
+      return;
+    }
+    toast({ title: "Тип удалён" });
     router.refresh();
   }
 
   return (
     <div className="space-y-4">
       <Button onClick={() => { setCreating(true); setEditing(null); }}>+ Новый тип</Button>
-      {error && <p className="text-destructive text-sm">{error}</p>}
 
       {creating && (
         <Card>
@@ -180,8 +193,13 @@ export function ObjectTypesManager({
                   </div>
                 </div>
               )}
-              {t.bookingMode === "HOURLY" && editing?.id !== t.id && (
-                <SlotsEditor typeId={t.id} initial={t.slots} />
+              {editing?.id !== t.id && (
+                <>
+                  <TypeMediaEditor typeId={t.id} initial={t.media} />
+                  {t.bookingMode === "HOURLY" && (
+                    <SlotsEditor typeId={t.id} initial={t.slots} />
+                  )}
+                </>
               )}
             </CardContent>
           </Card>
@@ -194,11 +212,10 @@ export function ObjectTypesManager({
 function SlotsEditor({ typeId, initial }: { typeId: string; initial: Slot[] }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const formRef = useRef<HTMLFormElement | null>(null);
 
   async function add(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setError(null);
     const fd = new FormData(e.currentTarget);
     const res = await fetch(`/api/admin/object-types/${typeId}/slots`, {
       method: "POST",
@@ -213,10 +230,11 @@ function SlotsEditor({ typeId, initial }: { typeId: string; initial: Slot[] }) {
     });
     const j = await res.json();
     if (!j.ok) {
-      setError(j.error || "Ошибка");
+      toast({ title: "Ошибка", description: j.error || "Не удалось создать слот", variant: "destructive" });
       return;
     }
-    (e.currentTarget as HTMLFormElement).reset();
+    toast({ title: "Слот создан" });
+    formRef.current?.reset();
     setOpen(false);
     router.refresh();
   }
@@ -224,7 +242,13 @@ function SlotsEditor({ typeId, initial }: { typeId: string; initial: Slot[] }) {
   async function del(id: string) {
     if (!confirm("Удалить слот?")) return;
     const res = await fetch(`/api/admin/slots/${id}`, { method: "DELETE" });
-    if ((await res.json()).ok) router.refresh();
+    const j = await res.json();
+    if (!j.ok) {
+      toast({ title: "Ошибка", description: j.error || "Не удалось удалить слот", variant: "destructive" });
+      return;
+    }
+    toast({ title: "Слот удалён" });
+    router.refresh();
   }
 
   return (
@@ -238,13 +262,15 @@ function SlotsEditor({ typeId, initial }: { typeId: string; initial: Slot[] }) {
             </span>
           )}
         </div>
-        <Button size="sm" variant="outline" onClick={() => setOpen((v) => !v)}>
-          {open ? "Отмена" : "+ Слот"}
-        </Button>
+        {!open && (
+          <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
+            + Добавить слот
+          </Button>
+        )}
       </div>
 
       {open && (
-        <form onSubmit={add} className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-3">
+        <form ref={formRef} onSubmit={add} className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-3">
           <div>
             <Label className="text-xs">Название</Label>
             <Input name="name" required placeholder="День" />
@@ -263,12 +289,14 @@ function SlotsEditor({ typeId, initial }: { typeId: string; initial: Slot[] }) {
           </div>
           <div>
             <Label className="text-xs">Порядок</Label>
-            <div className="flex gap-1">
-              <Input name="sortOrder" type="number" defaultValue={initial.length} />
-              <Button type="submit" size="sm">OK</Button>
-            </div>
+            <Input name="sortOrder" type="number" defaultValue={initial.length} />
           </div>
-          {error && <p className="md:col-span-5 text-sm text-destructive">{error}</p>}
+          <div className="md:col-span-5 flex gap-2 justify-end">
+            <Button type="button" size="sm" variant="outline" onClick={() => setOpen(false)}>
+              Отмена
+            </Button>
+            <Button type="submit" size="sm">OK</Button>
+          </div>
         </form>
       )}
 
@@ -306,6 +334,133 @@ function SlotsEditor({ typeId, initial }: { typeId: string; initial: Slot[] }) {
   );
 }
 
+function TypeMediaEditor({ typeId, initial }: { typeId: string; initial: TypeMedia[] }) {
+  const router = useRouter();
+  const fileInput = useRef<HTMLInputElement | null>(null);
+  const [uploading, setUploading] = useState(false);
+
+  async function uploadFile(file: File, type: TypeMedia["type"]) {
+    setUploading(true);
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("type", type);
+    const res = await fetch(`/api/admin/object-types/${typeId}/media/upload`, {
+      method: "POST",
+      body: fd,
+    });
+    const j = await res.json();
+    setUploading(false);
+    if (!j.ok) {
+      toast({ title: "Ошибка", description: j.error || "Не удалось загрузить", variant: "destructive" });
+      return;
+    }
+    toast({ title: "Загружено" });
+    router.refresh();
+  }
+
+  async function setMain(mediaId: string) {
+    const res = await fetch(`/api/admin/object-type-media/${mediaId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isMain: true }),
+    });
+    const j = await res.json();
+    if (!j.ok) {
+      toast({ title: "Ошибка", description: j.error || "Не удалось обновить", variant: "destructive" });
+      return;
+    }
+    router.refresh();
+  }
+
+  async function delMedia(mediaId: string) {
+    if (!confirm("Удалить файл?")) return;
+    const res = await fetch(`/api/admin/object-type-media/${mediaId}`, { method: "DELETE" });
+    const j = await res.json();
+    if (!j.ok) {
+      toast({ title: "Ошибка", description: j.error || "Не удалось удалить", variant: "destructive" });
+      return;
+    }
+    toast({ title: "Файл удалён" });
+    router.refresh();
+  }
+
+  return (
+    <div className="mt-4 pt-4 border-t">
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-sm font-semibold">
+          Медиа типа
+          <span className="text-xs text-muted-foreground font-normal ml-2">
+            (используются как fallback для объектов без собственных медиа)
+          </span>
+        </div>
+        <div>
+          <input
+            ref={fileInput}
+            type="file"
+            hidden
+            accept="image/*,video/*"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (!f) return;
+              const type: TypeMedia["type"] = f.type.startsWith("video/") ? "VIDEO" : "IMAGE";
+              uploadFile(f, type);
+              e.target.value = "";
+            }}
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={uploading}
+            onClick={() => fileInput.current?.click()}
+          >
+            <Upload className="w-4 h-4 mr-1" /> {uploading ? "Загрузка…" : "Загрузить"}
+          </Button>
+        </div>
+      </div>
+
+      {initial.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Медиа нет</p>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+          {initial.map((m) => (
+            <div key={m.id} className="border rounded-lg overflow-hidden">
+              <div className="aspect-square bg-slate-100">
+                {m.type === "VIDEO" ? (
+                  <video src={m.url} className="w-full h-full object-cover" />
+                ) : (
+                  <img src={m.url} alt="" className="w-full h-full object-cover" />
+                )}
+              </div>
+              <div className="p-2 flex items-center justify-between gap-1">
+                <span className="text-xs text-muted-foreground">{m.type}</span>
+                <div className="flex gap-1">
+                  <Button
+                    size="icon"
+                    variant={m.isMain ? "default" : "outline"}
+                    className="h-7 w-7"
+                    onClick={() => setMain(m.id)}
+                    title="Сделать главным"
+                  >
+                    <Star className="w-3 h-3" />
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant="outline"
+                    className="h-7 w-7"
+                    onClick={() => delMedia(m.id)}
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TypeForm({
   initial,
   categories,
@@ -320,9 +475,12 @@ function TypeForm({
   const [categoryId, setCategoryId] = useState(initial?.categoryId || categories[0]?.id || "");
   const cat = categories.find((c) => c.id === categoryId);
   const mode = cat?.bookingMode || "DAILY";
+  const { dirty, formProps } = useFormDirty();
+  const isEdit = !!initial;
 
   return (
     <form
+      {...formProps}
       onSubmit={(e) => {
         e.preventDefault();
         onSubmit(new FormData(e.currentTarget), categoryId);
@@ -338,7 +496,7 @@ function TypeForm({
         <select
           name="categoryId"
           value={categoryId}
-          onChange={(e) => setCategoryId(e.target.value)}
+          onChange={(e) => { setCategoryId(e.target.value); formProps.onChange(); }}
           disabled={!!initial}
           className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
         >
@@ -426,7 +584,9 @@ function TypeForm({
 
       <div className="md:col-span-3 flex gap-2 justify-end">
         <Button type="button" variant="outline" onClick={onCancel}>Отмена</Button>
-        <Button type="submit">{initial ? "Сохранить" : "Создать"}</Button>
+        <Button type="submit" disabled={isEdit && !dirty}>
+          {isEdit ? "Сохранить" : "Создать"}
+        </Button>
       </div>
     </form>
   );
