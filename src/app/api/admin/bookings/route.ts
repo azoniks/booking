@@ -1,7 +1,9 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
-import { ok, requireAdmin, unauth } from "@/lib/api-utils";
+import { ok, handleError, requireAdmin, unauth } from "@/lib/api-utils";
 import { Prisma } from "@prisma/client";
+import { adminBookingSchema } from "@/lib/validators";
+import { createBooking } from "@/lib/booking-service";
 
 export async function GET(req: NextRequest) {
   if (!(await requireAdmin())) return unauth();
@@ -27,4 +29,36 @@ export async function GET(req: NextRequest) {
     },
   });
   return ok(items);
+}
+
+// Ручное создание брони администратором: использует тот же createBooking
+// (проверка пересечений, расчёт цены), но без Tinkoff и сразу с нужным статусом.
+export async function POST(req: NextRequest) {
+  if (!(await requireAdmin())) return unauth();
+  try {
+    const data = adminBookingSchema.parse(await req.json());
+    const booking = await createBooking({
+      objectId: data.objectId,
+      checkInDate: data.checkInDate,
+      checkOutDate: data.checkOutDate,
+      startAt: data.startAt,
+      endAt: data.endAt,
+      slotId: data.slotId,
+      slotDate: data.slotDate,
+      guestsCount: data.guestsCount,
+      guestName: data.guestName,
+      guestEmail: data.guestEmail || "",
+      guestPhone: data.guestPhone,
+      guestComment: data.guestComment,
+    });
+    if (data.markAsPaid) {
+      await prisma.booking.update({
+        where: { id: booking.id },
+        data: { status: "PAID", paidAt: new Date() },
+      });
+    }
+    return ok({ id: booking.id, publicCode: booking.publicCode }, 201);
+  } catch (e) {
+    return handleError(e);
+  }
 }

@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatLocal } from "@/lib/time";
 import { formatRub } from "@/lib/utils";
+import { AdminBookingCreateForm } from "@/components/admin/AdminBookingCreateForm";
 
 export const dynamic = "force-dynamic";
 
@@ -13,15 +14,47 @@ export default async function BookingsPage({
   searchParams: Promise<{ status?: string }>;
 }) {
   const { status } = await searchParams;
-  const items = await prisma.booking.findMany({
-    where: status ? { status: status as never } : undefined,
-    orderBy: { createdAt: "desc" },
-    take: 100,
-    include: {
-      object: { include: { objectType: { include: { category: true } } } },
-      payment: true,
-    },
-  });
+  const [items, objects] = await Promise.all([
+    prisma.booking.findMany({
+      where: status ? { status: status as never } : undefined,
+      orderBy: { createdAt: "desc" },
+      take: 100,
+      include: {
+        object: { include: { objectType: { include: { category: true } } } },
+        payment: true,
+      },
+    }),
+    prisma.bookingObject.findMany({
+      where: { status: "ACTIVE" },
+      orderBy: [{ name: "asc" }],
+      include: {
+        objectType: {
+          include: {
+            category: true,
+            slots: { orderBy: [{ sortOrder: "asc" }, { startTime: "asc" }] },
+          },
+        },
+      },
+    }),
+  ]);
+
+  const formObjects = objects.map((o) => ({
+    id: o.id,
+    name: o.name,
+    categoryName: o.objectType.category.name,
+    typeName: o.objectType.name,
+    bookingMode: o.objectType.category.bookingMode,
+    checkInTime: o.objectType.checkInTime,
+    checkOutTime: o.objectType.checkOutTime,
+    baseCapacity: o.objectType.baseCapacity,
+    maxCapacity: o.objectType.maxCapacity,
+    slots: o.objectType.slots.map((s) => ({
+      id: s.id,
+      name: s.name,
+      startTime: s.startTime,
+      endTime: s.endTime,
+    })),
+  }));
 
   const tabs = [
     { value: "", label: "Все" },
@@ -33,7 +66,10 @@ export default async function BookingsPage({
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold">Брони</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Брони</h1>
+        <AdminBookingCreateForm objects={formObjects} />
+      </div>
       <div className="flex gap-2 flex-wrap">
         {tabs.map((t) => (
           <Link
