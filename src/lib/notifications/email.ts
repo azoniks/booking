@@ -167,13 +167,24 @@ export async function sendNewBookingNotifications(bookingId: string) {
 
   // Гостю — после оплаты, не сразу. Здесь только админу.
   const admins = await getAdminEmails();
+  const total = Number(b.totalPrice);
+  const prepay = Number(b.prepaymentAmount);
+  const remaining = Math.max(0, total - prepay);
+  const priceLines =
+    b.paymentPercent < 100 && remaining > 0
+      ? [
+          `Полная стоимость: ${total} ₽`,
+          `Предоплата онлайн (${b.paymentPercent}%): ${prepay} ₽`,
+          `Остаток при заселении: ${remaining.toFixed(2)} ₽`,
+        ]
+      : [`Сумма: ${total} ₽`];
   const text = [
     `Новая бронь ${b.publicCode}`,
     `Объект: ${b.object.name} (${b.object.objectType.category.name})`,
     `Гость: ${b.guestName}, ${b.guestPhone}, ${b.guestEmail}`,
     `Гостей: ${b.guestsCount}`,
     `${formatLocal(b.startAt)} → ${formatLocal(b.endAt)}`,
-    `Сумма: ${b.totalPrice} ₽`,
+    ...priceLines,
     `Статус: ${b.status} (ожидает оплаты)`,
   ].join("\n");
 

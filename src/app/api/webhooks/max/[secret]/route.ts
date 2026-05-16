@@ -65,11 +65,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sec
       await reply(cfg.apiUrl, cfg.token, chatId, `Бронь с кодом ${code} не найдена.`);
       return new Response("ok");
     }
+    const total = Number(booking.totalPrice);
+    const prepay = Number(booking.prepaymentAmount);
+    const remaining = Math.max(0, total - prepay);
+    const priceLines =
+      booking.paymentPercent < 100 && remaining > 0
+        ? [
+            `Полная стоимость: ${total} ₽`,
+            `Оплачено онлайн: ${prepay} ₽`,
+            `К оплате при заселении: ${remaining.toFixed(2)} ₽`,
+          ]
+        : [`Сумма: ${total} ₽`];
     const greeting = [
       `Здравствуйте, ${booking.guestName}!`,
       `Уведомления по брони ${booking.publicCode} подключены.`,
       `Время: ${formatLocal(booking.startAt)} — ${formatLocal(booking.endAt)}`,
-      `Сумма: ${booking.totalPrice} ₽`,
+      ...priceLines,
     ].join("\n");
     await reply(cfg.apiUrl, cfg.token, chatId, greeting);
     return new Response("ok");

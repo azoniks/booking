@@ -74,13 +74,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sec
       where: { id: booking.id },
       include: { object: { include: { objectType: { include: { category: true } } } } },
     });
+    const total = Number(booking.totalPrice);
+    const prepay = Number(booking.prepaymentAmount);
+    const remaining = Math.max(0, total - prepay);
+    const priceLines =
+      booking.paymentPercent < 100 && remaining > 0
+        ? [
+            `Полная стоимость: ${total} ₽`,
+            `Оплачено онлайн: ${prepay} ₽`,
+            `К оплате при заселении: ${remaining.toFixed(2)} ₽`,
+          ]
+        : [`Сумма: ${total} ₽`];
     const greeting = [
       `Здравствуйте, ${booking.guestName}!`,
       `Уведомления по брони <b>${booking.publicCode}</b> подключены.`,
       ``,
       `Объект: ${full?.object.name}`,
       `Время: ${formatLocal(booking.startAt)} — ${formatLocal(booking.endAt)}`,
-      `Сумма: ${booking.totalPrice} ₽`,
+      ...priceLines,
       ``,
       `Я напишу вам перед заездом.`,
     ].join("\n");

@@ -32,16 +32,44 @@ export default async function SuccessPage({
         </CardHeader>
         <CardContent className="space-y-3">
           {b ? (
-            <div className="space-y-2 text-sm">
-              <div>Код брони: <span className="font-mono font-bold">{b.publicCode}</span></div>
-              <div>Объект: {b.object.name} ({b.object.objectType.category.name})</div>
-              <div>Время: {formatLocal(b.startAt)} — {formatLocal(b.endAt)}</div>
-              <div>Гостей: {b.guestsCount}</div>
-              <div>Сумма: {b.totalPrice.toString()} ₽</div>
-              <div className="text-muted-foreground pt-2">
-                Подтверждение отправлено на {b.guestEmail}.
-              </div>
-            </div>
+            (() => {
+              const total = Number(b.totalPrice);
+              const prepay = Number(b.prepaymentAmount);
+              const remaining = Math.max(0, total - prepay);
+              const split = b.paymentPercent < 100 && remaining > 0;
+              const fmt = (n: number) => n.toLocaleString("ru-RU");
+              return (
+                <div className="space-y-2 text-sm">
+                  <div>Код брони: <span className="font-mono font-bold">{b.publicCode}</span></div>
+                  <div>Объект: {b.object.name} ({b.object.objectType.category.name})</div>
+                  <div>Время: {formatLocal(b.startAt)} — {formatLocal(b.endAt)}</div>
+                  <div>Гостей: {b.guestsCount}</div>
+                  {split ? (
+                    <div className="rounded-md border bg-muted/30 p-3 mt-1 space-y-1">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Полная стоимость</span>
+                        <span>{fmt(total)} ₽</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">
+                          Оплачено онлайн (предоплата {b.paymentPercent}%)
+                        </span>
+                        <span className="font-medium text-emerald-700">{fmt(prepay)} ₽</span>
+                      </div>
+                      <div className="flex justify-between border-t pt-1">
+                        <span className="font-medium">Остаток при заселении</span>
+                        <span className="font-semibold">{fmt(remaining)} ₽</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>Оплачено: <b>{fmt(prepay || total)} ₽</b></div>
+                  )}
+                  <div className="text-muted-foreground pt-2">
+                    Подтверждение отправлено на {b.guestEmail}.
+                  </div>
+                </div>
+              );
+            })()
           ) : (
             <p>Спасибо! Подробности отправлены на email.</p>
           )}

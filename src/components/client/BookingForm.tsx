@@ -628,7 +628,7 @@ export function BookingForm({ object }: { object: ObjectInfo }) {
                   <span>{price.toLocaleString("ru-RU")} ₽</span>
                 </div>
                 <div className="flex items-center justify-between text-sm text-muted-foreground">
-                  <span>Остаток при заселении</span>
+                  <span>Остаток (на месте)</span>
                   <span>
                     {Math.round(price * (1 - paymentPercent / 100)).toLocaleString("ru-RU")} ₽
                   </span>
