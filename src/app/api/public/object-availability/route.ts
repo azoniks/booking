@@ -55,7 +55,13 @@ export async function GET(req: NextRequest) {
         startAt: { lt: toDate },
         blockedUntil: { gt: fromDate },
       },
-      select: { id: true, startAt: true, endAt: true, blockedUntil: true },
+      select: {
+        id: true,
+        startAt: true,
+        endAt: true,
+        blockedUntil: true,
+        sectionsBooked: true,
+      },
     });
 
     const blocks = await prisma.objectBlock.findMany({
@@ -66,6 +72,53 @@ export async function GET(req: NextRequest) {
       },
       select: { id: true, startAt: true, endAt: true },
     });
+
+    // Секционные типы: считаем занятость по дням внутри окна.
+    // На каждый день суммируем sectionsBooked броней, которые перекрывают этот день
+    // (по МСК-границам). Бронь с sectionsBooked === null трактуется как «вся площадка».
+    const sectionsConfig =
+      t.sectionsTotal && t.sectionCapacity
+        ? {
+            total: t.sectionsTotal,
+            capacity: t.sectionCapacity,
+            max: t.sectionsBookingMax ?? t.sectionsTotal,
+            fullVenuePrice: t.fullVenuePrice ? Number(t.fullVenuePrice) : null,
+          }
+        : null;
+
+    const daysOccupancy: { date: string; sectionsUsed: number; hasFullVenue: boolean }[] = [];
+    if (sectionsConfig) {
+      const TZ_OFFSET_MIN = 180; // Europe/Moscow
+      const fromDayMs =
+        Math.floor((fromDate.getTime() + TZ_OFFSET_MIN * 60_000) / 86_400_000) * 86_400_000;
+      const toDayMs =
+        Math.floor((toDate.getTime() + TZ_OFFSET_MIN * 60_000) / 86_400_000) * 86_400_000;
+      for (let dayMs = fromDayMs; dayMs <= toDayMs; dayMs += 86_400_000) {
+        // dayMs — МСК-полночь дня (в UTC-миллисекундах относительно МСК-grid)
+        const dayStart = dayMs - TZ_OFFSET_MIN * 60_000;
+        const dayEnd = dayStart + 86_400_000;
+        let used = 0;
+        let hasFull = false;
+        for (const b of bookings) {
+          const bs = b.startAt.getTime();
+          const be = b.endAt.getTime() + cleaningMs;
+          if (bs < dayEnd && be > dayStart) {
+            const sec = b.sectionsBooked ?? sectionsConfig.total;
+            used += sec;
+            if (sec >= sectionsConfig.total) hasFull = true;
+          }
+        }
+        const d = new Date(dayMs);
+        const y = d.getUTCFullYear();
+        const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+        const day = String(d.getUTCDate()).padStart(2, "0");
+        daysOccupancy.push({
+          date: `${y}-${m}-${day}`,
+          sectionsUsed: used,
+          hasFullVenue: hasFull,
+        });
+      }
+    }
 
     return ok({
       objectId,
@@ -83,6 +136,8 @@ export async function GET(req: NextRequest) {
       basePrice: Number(t.basePrice),
       extraGuestPrice: Number(t.extraGuestPrice),
       paymentPercent,
+      sections: sectionsConfig,
+      daysOccupancy: sectionsConfig ? daysOccupancy : [],
       slots: t.slots.map((s) => ({
         id: s.id,
         name: s.name,

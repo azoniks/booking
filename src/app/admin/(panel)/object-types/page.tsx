@@ -44,6 +44,10 @@ export default async function ObjectTypesPage() {
           basePrice: t.basePrice.toString(),
           extraGuestPrice: t.extraGuestPrice.toString(),
           paymentPercent: t.paymentPercent,
+          sectionsTotal: t.sectionsTotal,
+          sectionCapacity: t.sectionCapacity,
+          sectionsBookingMax: t.sectionsBookingMax,
+          fullVenuePrice: t.fullVenuePrice ? t.fullVenuePrice.toString() : null,
           objectsCount: t._count.objects,
           slots: t.slots.map((s) => ({
             id: s.id,

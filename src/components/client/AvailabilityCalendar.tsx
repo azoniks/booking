@@ -144,32 +144,65 @@ export function AvailabilityCalendar({
   );
 }
 
+export type DayOccupancy = {
+  date: string; // YYYY-MM-DD в МСК
+  sectionsUsed: number;
+  hasFullVenue: boolean;
+};
+
 /**
  * Одиночный пикер для FULL_DAY: клиент выбирает один день целиком.
  * Использует тот же расчёт занятости, что и range-вариант выше.
+ *
+ * sectionsInfo (опц.) включает секционный режим: вместо «день занят/свободен»
+ * проверяется sectionsUsed + needed ≤ total.
  */
 export function SingleDayPicker({
   busy,
   cleaningMinutes,
   selected,
   onChange,
+  sectionsInfo,
 }: {
   busy: BusyInterval[];
   cleaningMinutes: number;
   selected: Date | undefined;
   onChange: (date: Date | undefined) => void;
+  sectionsInfo?: {
+    total: number;
+    needed: number;
+    daysOccupancy: DayOccupancy[];
+  };
 }) {
   const occupied = useMemo(
     () => collectOccupiedDays(busy, cleaningMinutes),
     [busy, cleaningMinutes],
   );
 
+  const occupancyMap = useMemo(() => {
+    const m = new Map<string, DayOccupancy>();
+    if (sectionsInfo) {
+      for (const d of sectionsInfo.daysOccupancy) m.set(d.date, d);
+    }
+    return m;
+  }, [sectionsInfo]);
+
   const isPast = (d: Date) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     return d < today;
   };
-  const isBooked = (d: Date) => occupied.has(dateKey(d));
+  const isBooked = (d: Date) => {
+    if (sectionsInfo) {
+      const occ = occupancyMap.get(dateKey(d));
+      if (!occ) return false;
+      if (occ.hasFullVenue) return true;
+      // вся площадка нужна — мешает любая занятая секция
+      if (sectionsInfo.needed === sectionsInfo.total && occ.sectionsUsed > 0) return true;
+      return occ.sectionsUsed + sectionsInfo.needed > sectionsInfo.total;
+    }
+    return occupied.has(dateKey(d));
+  };
   const isDisabled = (d: Date) => isPast(d) || isBooked(d);
 
   return (

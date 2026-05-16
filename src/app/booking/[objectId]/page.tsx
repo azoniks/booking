@@ -66,12 +66,29 @@ export default async function BookingPage({ params }: { params: Promise<{ object
       text: `время на уборку ${t.cleaningMinutes} мин`,
     });
   }
-  const unitLabel =
-    mode === "DAILY" ? "сутки" : mode === "FULL_DAY" ? "день" : "час";
+  const isSectional = !!(t.sectionsTotal && t.sectionCapacity);
+  if (isSectional) {
+    const maxSeparate = t.sectionsBookingMax ?? t.sectionsTotal!;
+    facts.push({
+      icon: <Users className="w-4 h-4" />,
+      text: `${t.sectionsTotal} секций × ${t.sectionCapacity} чел. (до ${maxSeparate} секций отдельно, больше — вся площадка)`,
+    });
+  }
+  const unitLabel = isSectional
+    ? "секция"
+    : mode === "DAILY"
+      ? "сутки"
+      : mode === "FULL_DAY"
+        ? "день"
+        : "час";
+  const fullVenueNote =
+    isSectional && t.fullVenuePrice
+      ? ` · вся площадка ${Math.round(Number(t.fullVenuePrice)).toLocaleString("ru-RU")} ₽`
+      : "";
   facts.push({
     icon: <Tag className="w-4 h-4" />,
-    text: `от ${basePrice.toLocaleString("ru-RU")} ₽ / ${unitLabel}${
-      mode !== "FULL_DAY" && Number(t.extraGuestPrice) > 0
+    text: `от ${basePrice.toLocaleString("ru-RU")} ₽ / ${unitLabel}${fullVenueNote}${
+      !isSectional && mode !== "FULL_DAY" && Number(t.extraGuestPrice) > 0
         ? ` · доплата ${Math.round(Number(t.extraGuestPrice))} ₽ за допместо`
         : ""
     }`,
@@ -147,6 +164,17 @@ export default async function BookingPage({ params }: { params: Promise<{ object
                 maxCapacity: t.maxCapacity,
                 basePrice: Number(t.basePrice),
                 extraGuestPrice: Number(t.extraGuestPrice),
+                sections:
+                  t.sectionsTotal && t.sectionCapacity
+                    ? {
+                        total: t.sectionsTotal,
+                        capacity: t.sectionCapacity,
+                        max: t.sectionsBookingMax ?? t.sectionsTotal,
+                        fullVenuePrice: t.fullVenuePrice
+                          ? Number(t.fullVenuePrice)
+                          : null,
+                      }
+                    : null,
               }}
             />
           </div>

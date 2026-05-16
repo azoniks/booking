@@ -25,6 +25,12 @@ export type ObjectType = {
   basePrice: string;
   extraGuestPrice: string;
   hasSlots: boolean;
+  sections: {
+    total: number;
+    capacity: number;
+    max: number;
+    fullVenuePrice: number | null;
+  } | null;
   objects: ObjectCardData[];
 };
 
@@ -151,6 +157,12 @@ function TypeSection({
           ? `весь день: ${t.workingHoursStart}–${t.workingHoursEnd}`
           : "весь день",
     });
+    if (t.sections) {
+      meta.push({
+        icon: <Users className="w-4 h-4" />,
+        text: `${t.sections.total} секций × ${t.sections.capacity} чел. (до ${t.sections.max} секций отдельно)`,
+      });
+    }
   } else {
     meta.push({
       icon: <Clock className="w-4 h-4" />,
@@ -216,14 +228,21 @@ function TypeSection({
                 </span>
                 <span className="text-sm text-muted-foreground ml-1">
                   /
-                  {bookingMode === "DAILY"
-                    ? "сутки"
-                    : bookingMode === "FULL_DAY"
-                    ? "день"
-                    : t.hasSlots
-                    ? "слот"
-                    : "час"}
+                  {t.sections
+                    ? "секция"
+                    : bookingMode === "DAILY"
+                      ? "сутки"
+                      : bookingMode === "FULL_DAY"
+                        ? "день"
+                        : t.hasSlots
+                          ? "слот"
+                          : "час"}
                 </span>
+                {t.sections?.fullVenuePrice && (
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    вся площадка — {Math.round(t.sections.fullVenuePrice).toLocaleString("ru-RU")} ₽
+                  </div>
+                )}
               </div>
             </div>
 

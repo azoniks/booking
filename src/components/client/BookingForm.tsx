@@ -8,7 +8,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AvailabilityCalendar, SingleDayPicker, type BusyInterval } from "./AvailabilityCalendar";
+import {
+  AvailabilityCalendar,
+  SingleDayPicker,
+  type BusyInterval,
+  type DayOccupancy,
+} from "./AvailabilityCalendar";
 import { HourlySlotsPicker } from "./HourlySlotsPicker";
 import { SlotPicker, type Slot } from "./SlotPicker";
 
@@ -74,7 +79,22 @@ type ObjectInfo = {
   maxCapacity: number;
   basePrice: number;
   extraGuestPrice: number;
+  sections: {
+    total: number;
+    capacity: number;
+    max: number;
+    fullVenuePrice: number | null;
+  } | null;
 };
+
+function calcSectionsNeeded(
+  guests: number,
+  s: { total: number; capacity: number; max: number },
+): number {
+  const needed = Math.ceil(Math.max(1, guests) / s.capacity);
+  if (needed > s.total) return s.total;
+  return needed > s.max ? s.total : needed;
+}
 
 const DAY_MS = 86_400_000;
 const HOUR_MS = 3_600_000;
@@ -137,6 +157,7 @@ export function BookingForm({ object }: { object: ObjectInfo }) {
   const [comment, setComment] = useState("");
 
   const [busy, setBusy] = useState<BusyInterval[]>([]);
+  const [daysOccupancy, setDaysOccupancy] = useState<DayOccupancy[]>([]);
   const [paymentPercent, setPaymentPercent] = useState(100);
   const [loadingBusy, setLoadingBusy] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -158,6 +179,7 @@ export function BookingForm({ object }: { object: ObjectInfo }) {
         if (!aborted && j.ok) {
           setBusy(j.data.busy);
           setSlots(j.data.slots ?? []);
+          setDaysOccupancy(j.data.daysOccupancy ?? []);
           setPaymentPercent(Number(j.data.paymentPercent ?? 100));
         }
       } finally {
@@ -184,9 +206,20 @@ export function BookingForm({ object }: { object: ObjectInfo }) {
   );
 
   const useSlots = !isDaily && !isFullDay && slots.length > 0;
+  const isSectional = isFullDay && !!object.sections;
+  const sectionsNeeded = useMemo(
+    () => (isSectional ? calcSectionsNeeded(guests, object.sections!) : 0),
+    [isSectional, guests, object.sections],
+  );
 
   const price = useMemo(() => {
     const extra = Math.max(0, guests - object.baseCapacity);
+    if (isSectional) {
+      if (!fullDayDate || !object.sections) return 0;
+      const isFull = sectionsNeeded === object.sections.total;
+      if (isFull && object.sections.fullVenuePrice) return object.sections.fullVenuePrice;
+      return object.basePrice * sectionsNeeded;
+    }
     if (isFullDay) {
       // FULL_DAY: фиксированная цена за день, без множителя и без доплат за гостей.
       return fullDayDate ? object.basePrice : 0;
@@ -220,6 +253,8 @@ export function BookingForm({ object }: { object: ObjectInfo }) {
   }, [
     isDaily,
     isFullDay,
+    isSectional,
+    sectionsNeeded,
     useSlots,
     range,
     slotId,
@@ -232,6 +267,7 @@ export function BookingForm({ object }: { object: ObjectInfo }) {
     object.baseCapacity,
     object.basePrice,
     object.extraGuestPrice,
+    object.sections,
   ]);
 
   const canSubmit = isFullDay
@@ -371,10 +407,22 @@ export function BookingForm({ object }: { object: ObjectInfo }) {
                 cleaningMinutes={0}
                 selected={fullDayDate}
                 onChange={setFullDayDate}
+                sectionsInfo={
+                  isSectional && object.sections
+                    ? {
+                        total: object.sections.total,
+                        needed: sectionsNeeded,
+                        daysOccupancy,
+                      }
+                    : undefined
+                }
               />
               <p className="text-xs text-muted-foreground mt-2">
-                Бронь на весь день: {object.workingHoursStart || "09:00"}–
-                {object.workingHoursEnd || "21:00"}
+                {isSectional && object.sections
+                  ? sectionsNeeded === object.sections.total
+                    ? `Будет забронирована вся площадка — ${object.sections.total} секций (до ${object.sections.total * object.sections.capacity} чел.)`
+                    : `Будет забронировано ${sectionsNeeded} ${plural(sectionsNeeded, ["секция", "секции", "секций"])} (до ${sectionsNeeded * object.sections.capacity} чел.)`
+                  : `Бронь на весь день: ${object.workingHoursStart || "09:00"}–${object.workingHoursEnd || "21:00"}`}
               </p>
             </div>
           ) : isDaily ? (
@@ -525,15 +573,21 @@ export function BookingForm({ object }: { object: ObjectInfo }) {
             <Input
               type="number"
               min={1}
-              max={object.maxCapacity}
+              max={
+                isSectional && object.sections
+                  ? object.sections.total * object.sections.capacity
+                  : object.maxCapacity
+              }
               value={guests}
               onChange={(e) => setGuests(Number(e.target.value))}
               required
             />
             <p className="text-xs text-muted-foreground mt-1">
-              {isFullDay
-                ? `до ${object.maxCapacity} гостей включено`
-                : `${object.baseCapacity} включено · доплата за допместо ${object.extraGuestPrice} ₽`}
+              {isSectional && object.sections
+                ? `до ${object.sections.total * object.sections.capacity} гостей (${object.sections.capacity} на секцию)`
+                : isFullDay
+                  ? `до ${object.maxCapacity} гостей включено`
+                  : `${object.baseCapacity} включено · доплата за допместо ${object.extraGuestPrice} ₽`}
             </p>
           </div>
 

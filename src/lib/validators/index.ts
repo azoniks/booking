@@ -19,6 +19,29 @@ export const categoryCreateSchema = z.object({
 });
 export const categoryUpdateSchema = categoryCreateSchema.partial();
 
+const sectionsFields = {
+  sectionsTotal: z.coerce.number().int().min(2).max(100).optional().nullable(),
+  sectionCapacity: z.coerce.number().int().min(1).max(100).optional().nullable(),
+  sectionsBookingMax: z.coerce.number().int().min(1).max(100).optional().nullable(),
+  fullVenuePrice: z.coerce.number().nonnegative().optional().nullable(),
+};
+
+// Либо все три секционных поля заданы вместе, либо все null.
+// sectionsBookingMax ≤ sectionsTotal.
+function sectionsRefine<T extends {
+  sectionsTotal?: number | null;
+  sectionCapacity?: number | null;
+  sectionsBookingMax?: number | null;
+}>(d: T): boolean {
+  const t = d.sectionsTotal ?? null;
+  const c = d.sectionCapacity ?? null;
+  const m = d.sectionsBookingMax ?? null;
+  const filled = [t, c].filter((v) => v !== null).length;
+  if (filled !== 0 && filled !== 2) return false;
+  if (t !== null && m !== null && m > t) return false;
+  return true;
+}
+
 export const objectTypeCreateSchema = z
   .object({
     categoryId: z.string().min(1),
@@ -37,10 +60,16 @@ export const objectTypeCreateSchema = z
     basePrice: z.coerce.number().nonnegative(),
     extraGuestPrice: z.coerce.number().nonnegative().default(0),
     paymentPercent: z.coerce.number().int().min(1).max(100).optional().nullable(),
+    ...sectionsFields,
   })
   .refine((d) => d.maxCapacity >= d.baseCapacity, {
     message: "maxCapacity должен быть >= baseCapacity",
     path: ["maxCapacity"],
+  })
+  .refine(sectionsRefine, {
+    message:
+      "sectionsTotal и sectionCapacity должны быть заданы вместе; sectionsBookingMax ≤ sectionsTotal",
+    path: ["sectionsTotal"],
   });
 
 export const objectTypeUpdateSchema = z
@@ -60,6 +89,12 @@ export const objectTypeUpdateSchema = z
     basePrice: z.coerce.number().nonnegative().optional(),
     extraGuestPrice: z.coerce.number().nonnegative().optional(),
     paymentPercent: z.coerce.number().int().min(1).max(100).optional().nullable(),
+    ...sectionsFields,
+  })
+  .refine(sectionsRefine, {
+    message:
+      "sectionsTotal и sectionCapacity должны быть заданы вместе; sectionsBookingMax ≤ sectionsTotal",
+    path: ["sectionsTotal"],
   });
 
 export const objectCreateSchema = z.object({

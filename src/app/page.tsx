@@ -107,6 +107,17 @@ export default async function HomePage({
                 basePrice: t.basePrice.toString(),
                 extraGuestPrice: t.extraGuestPrice.toString(),
                 hasSlots: t.slots.length > 0,
+                sections:
+                  t.sectionsTotal && t.sectionCapacity
+                    ? {
+                        total: t.sectionsTotal,
+                        capacity: t.sectionCapacity,
+                        max: t.sectionsBookingMax ?? t.sectionsTotal,
+                        fullVenuePrice: t.fullVenuePrice
+                          ? Number(t.fullVenuePrice)
+                          : null,
+                      }
+                    : null,
                 objects: t.objects.map((o) => {
                   const ownMedia = o.media.map((m) => ({
                     id: m.id,

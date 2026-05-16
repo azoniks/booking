@@ -46,6 +46,29 @@ function addDayISO(dateISO: string): string {
   return d.toISOString().slice(0, 10);
 }
 
+/**
+ * Сколько секций нужно для N гостей. null → не секционный тип.
+ * Если нужно больше sectionsBookingMax — бронируется вся площадка (sectionsTotal).
+ */
+export function calcSectionsNeeded(
+  guests: number,
+  t: {
+    sectionsTotal: number | null;
+    sectionCapacity: number | null;
+    sectionsBookingMax: number | null;
+  },
+): number | null {
+  if (!t.sectionsTotal || !t.sectionCapacity) return null;
+  const max = t.sectionsBookingMax ?? t.sectionsTotal;
+  const needed = Math.ceil(guests / t.sectionCapacity);
+  if (needed > t.sectionsTotal) {
+    throw new Error(
+      `Слишком много гостей: максимум ${t.sectionsTotal * t.sectionCapacity}`,
+    );
+  }
+  return needed > max ? t.sectionsTotal : needed;
+}
+
 export async function createBooking(args: CreateBookingArgs) {
   const obj = await prisma.bookingObject.findUnique({
     where: { id: args.objectId },
@@ -98,10 +121,19 @@ export async function createBooking(args: CreateBookingArgs) {
   if (endAt <= startAt)
     throw new Error("Время окончания должно быть после времени начала");
 
-  if (args.guestsCount < 1 || args.guestsCount > t.maxCapacity)
-    throw new Error(
-      `Гостей: от 1 до ${t.maxCapacity}`,
-    );
+  // Секционная логика (банкетные площадки): отдельный потолок гостей —
+  // sectionsTotal * sectionCapacity. maxCapacity типа в таком случае не
+  // используется (он бессмысленен — площадка вмещает всех).
+  const sectionsNeeded = calcSectionsNeeded(args.guestsCount, t);
+
+  if (sectionsNeeded === null) {
+    if (args.guestsCount < 1 || args.guestsCount > t.maxCapacity)
+      throw new Error(
+        `Гостей: от 1 до ${t.maxCapacity}`,
+      );
+  } else if (args.guestsCount < 1) {
+    throw new Error("Гостей: минимум 1");
+  }
 
   if (mode === "HOURLY" && !args.slotId) {
     const hours = (endAt.getTime() - startAt.getTime()) / 3_600_000;
@@ -113,9 +145,23 @@ export async function createBooking(args: CreateBookingArgs) {
   }
 
   // Pricing: если у слота задан priceOverride — используем его.
-  // Иначе — обычный units * basePrice. Доплата за допгостей — всегда.
+  // Если секционная бронь — basePrice × sectionsNeeded (или fullVenuePrice).
+  // Иначе — обычный units * basePrice. Доплата за допгостей — всегда (но не для секционных).
   let pricing: ReturnType<typeof calcPrice>;
-  if (slotPriceOverride !== null) {
+  if (sectionsNeeded !== null) {
+    const isFullVenue = sectionsNeeded === t.sectionsTotal;
+    const total =
+      isFullVenue && t.fullVenuePrice
+        ? new Prisma.Decimal(t.fullVenuePrice)
+        : new Prisma.Decimal(t.basePrice).mul(sectionsNeeded);
+    pricing = {
+      units: sectionsNeeded,
+      basePriceTotal: total,
+      extraGuests: 0,
+      extraGuestsCost: new Prisma.Decimal(0),
+      totalPrice: total,
+    };
+  } else if (slotPriceOverride !== null) {
     const extraGuests = Math.max(0, args.guestsCount - t.baseCapacity);
     const extraCost = new Prisma.Decimal(t.extraGuestPrice).mul(extraGuests);
     const total = new Prisma.Decimal(slotPriceOverride).add(extraCost);
@@ -158,8 +204,26 @@ export async function createBooking(args: CreateBookingArgs) {
         endAt,
         cleaningMinutes: t.cleaningMinutes,
       });
-      if (conflicts.bookings.length > 0 || conflicts.blocks.length > 0) {
-        throw new BookingConflictError();
+      if (conflicts.blocks.length > 0) throw new BookingConflictError();
+
+      if (sectionsNeeded === null) {
+        // Несекционный тип — любое пересечение = конфликт.
+        if (conflicts.bookings.length > 0) throw new BookingConflictError();
+      } else {
+        // Секционный тип: считаем занятость по секциям.
+        // sectionsBooked === null трактуется как «весь объект» (legacy).
+        const sectionsTotal = t.sectionsTotal!;
+        const wantFullVenue = sectionsNeeded === sectionsTotal;
+        const usedByOthers = conflicts.bookings.reduce(
+          (sum, b) => sum + (b.sectionsBooked ?? sectionsTotal),
+          0,
+        );
+        if (wantFullVenue && conflicts.bookings.length > 0) {
+          throw new BookingConflictError();
+        }
+        if (usedByOthers + sectionsNeeded > sectionsTotal) {
+          throw new BookingConflictError();
+        }
       }
 
       return tx.booking.create({
@@ -180,6 +244,7 @@ export async function createBooking(args: CreateBookingArgs) {
           totalPrice: pricing.totalPrice,
           paymentPercent,
           prepaymentAmount,
+          sectionsBooked: sectionsNeeded,
           status: "PENDING",
         },
       });

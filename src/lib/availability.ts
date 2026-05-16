@@ -30,7 +30,7 @@ export async function findConflicts(
     excludeBookingId?: string;
   },
 ): Promise<{
-  bookings: { id: string; startAt: Date; blockedUntil: Date }[];
+  bookings: { id: string; startAt: Date; blockedUntil: Date; sectionsBooked: number | null }[];
   blocks: { id: string; startAt: Date; endAt: Date }[];
 }> {
   const blockedUntil = new Date(args.endAt.getTime() + args.cleaningMinutes * 60_000);
@@ -44,7 +44,7 @@ export async function findConflicts(
       startAt: { lt: blockedUntil },
       blockedUntil: { gt: args.startAt },
     },
-    select: { id: true, startAt: true, blockedUntil: true },
+    select: { id: true, startAt: true, blockedUntil: true, sectionsBooked: true },
   });
 
   const blocks = await client.objectBlock.findMany({

@@ -57,6 +57,14 @@ model ObjectType {
   extraGuestPrice   Decimal         @default(0) @db.Decimal(10, 2)
   // % предоплаты для этого типа. null = использовать глобальный из Settings.paymentPercent
   paymentPercent    Int?
+  // Секционная бронь (банкетные площадки): null → секционная логика отключена,
+  // объекты типа бронируются 1:1 как обычно. Если задано — клиент бронирует
+  // ceil(guests/sectionCapacity) секций; больше sectionsBookingMax → вся площадка.
+  sectionsTotal      Int?
+  sectionCapacity    Int?
+  sectionsBookingMax Int?
+  // Цена за всю площадку (override). null → fallback = basePrice * sectionsTotal.
+  fullVenuePrice     Decimal?        @db.Decimal(10, 2)
   objects           BookingObject[]
   slots             ObjectTypeSlot[]
   media             ObjectTypeMedia[]
@@ -171,6 +179,9 @@ model Booking {
   // оплачивается на месте.
   prepaymentAmount Decimal          @default(0) @db.Decimal(10, 2)
   paymentPercent  Int               @default(100)
+  // Для секционных типов (банкетные площадки) — сколько секций занимает бронь.
+  // null → бронь занимает объект целиком (не-секционный тип или legacy).
+  sectionsBooked  Int?
   status          BookingStatus     @default(PENDING)
   cancelReason    String?
   reminderSentAt  DateTime?

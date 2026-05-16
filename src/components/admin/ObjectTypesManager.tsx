@@ -48,6 +48,10 @@ type Type = {
   basePrice: string;
   extraGuestPrice: string;
   paymentPercent: number | null;
+  sectionsTotal: number | null;
+  sectionCapacity: number | null;
+  sectionsBookingMax: number | null;
+  fullVenuePrice: string | null;
   objectsCount: number;
   slots: Slot[];
   media: TypeMedia[];
@@ -74,6 +78,16 @@ export function ObjectTypesManager({
     const mode = cat?.bookingMode || "DAILY";
 
     const ppRaw = form.get("paymentPercent");
+    const optInt = (key: string): number | null => {
+      const raw = form.get(key);
+      const s = raw == null ? "" : String(raw).trim();
+      return s === "" ? null : Number(s);
+    };
+    const optDecimal = (key: string): number | null => {
+      const raw = form.get(key);
+      const s = raw == null ? "" : String(raw).trim();
+      return s === "" ? null : Number(s);
+    };
     const data: Record<string, unknown> = {
       name: form.get("name"),
       description: form.get("description") || null,
@@ -85,6 +99,19 @@ export function ObjectTypesManager({
       paymentPercent: ppRaw && String(ppRaw).trim() !== "" ? Number(ppRaw) : null,
     };
     if (!id) data.categoryId = categoryId;
+
+    // Секции — только для FULL_DAY. Для остальных режимов всегда null.
+    if (mode === "FULL_DAY") {
+      data.sectionsTotal = optInt("sectionsTotal");
+      data.sectionCapacity = optInt("sectionCapacity");
+      data.sectionsBookingMax = optInt("sectionsBookingMax");
+      data.fullVenuePrice = optDecimal("fullVenuePrice");
+    } else {
+      data.sectionsTotal = null;
+      data.sectionCapacity = null;
+      data.sectionsBookingMax = null;
+      data.fullVenuePrice = null;
+    }
 
     if (mode === "DAILY") {
       data.checkInTime = form.get("checkInTime") || null;
@@ -191,6 +218,13 @@ export function ObjectTypesManager({
                         цена {t.basePrice} ₽ + {t.extraGuestPrice} ₽/допместо
                         {t.paymentPercent !== null && ` · предоплата ${t.paymentPercent}%`}
                       </div>
+                      {t.sectionsTotal && t.sectionCapacity && (
+                        <div>
+                          {t.sectionsTotal} секций × {t.sectionCapacity} чел.
+                          {t.sectionsBookingMax != null && ` · до ${t.sectionsBookingMax} секций отдельно`}
+                          {t.fullVenuePrice && ` · вся площадка ${t.fullVenuePrice} ₽`}
+                        </div>
+                      )}
                       <div>Объектов: {t.objectsCount}</div>
                     </div>
                   </div>
@@ -723,6 +757,66 @@ function TypeForm({
           placeholder="например, 30"
         />
       </div>
+
+      {mode === "FULL_DAY" && (
+        <div className="md:col-span-3 border rounded-md p-3 bg-slate-50/50 space-y-3">
+          <div className="text-sm font-semibold">
+            Секции (банкетные площадки)
+            <span className="text-xs text-muted-foreground font-normal ml-2">
+              оставьте пустыми, чтобы не использовать секционную бронь
+            </span>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div>
+              <Label className="text-xs">Всего секций</Label>
+              <Input
+                name="sectionsTotal"
+                type="number"
+                min={2}
+                max={100}
+                defaultValue={initial?.sectionsTotal ?? ""}
+                placeholder="напр. 15"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Вместимость секции</Label>
+              <Input
+                name="sectionCapacity"
+                type="number"
+                min={1}
+                max={100}
+                defaultValue={initial?.sectionCapacity ?? ""}
+                placeholder="напр. 10"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Макс. секций по отдельности</Label>
+              <Input
+                name="sectionsBookingMax"
+                type="number"
+                min={1}
+                max={100}
+                defaultValue={initial?.sectionsBookingMax ?? ""}
+                placeholder="напр. 6 (выше → вся площадка)"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Цена за всю площадку, ₽</Label>
+              <Input
+                name="fullVenuePrice"
+                type="number"
+                step="0.01"
+                min={0}
+                defaultValue={initial?.fullVenuePrice ?? ""}
+                placeholder="пусто = basePrice × всего секций"
+              />
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            «Базовая цена» в этом случае = цена за одну секцию.
+          </p>
+        </div>
+      )}
 
       <div className="md:col-span-3 flex gap-2 justify-end">
         <Button type="button" variant="outline" onClick={onCancel}>Отмена</Button>
