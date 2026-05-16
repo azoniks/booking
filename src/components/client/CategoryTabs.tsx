@@ -24,6 +24,7 @@ export type ObjectType = {
   maxCapacity: number;
   basePrice: string;
   extraGuestPrice: string;
+  hasSlots: boolean;
   objects: ObjectCardData[];
 };
 
@@ -32,7 +33,7 @@ export type CategoryView = {
   name: string;
   slug: string;
   description: string | null;
-  bookingMode: "DAILY" | "HOURLY";
+  bookingMode: "DAILY" | "HOURLY" | "FULL_DAY";
   objectTypes: ObjectType[];
 };
 
@@ -116,7 +117,7 @@ function TypeSection({
   bookingMode,
 }: {
   type: ObjectType;
-  bookingMode: "DAILY" | "HOURLY";
+  bookingMode: "DAILY" | "HOURLY" | "FULL_DAY";
 }) {
   const priceFrom = Math.round(Number(t.basePrice));
 
@@ -142,6 +143,14 @@ function TypeSection({
       icon: <Calendar className="w-4 h-4" />,
       text: `заезд ${t.checkInTime}, выезд ${t.checkOutTime}`,
     });
+  } else if (bookingMode === "FULL_DAY") {
+    meta.push({
+      icon: <Clock className="w-4 h-4" />,
+      text:
+        t.workingHoursStart && t.workingHoursEnd
+          ? `весь день: ${t.workingHoursStart}–${t.workingHoursEnd}`
+          : "весь день",
+    });
   } else {
     meta.push({
       icon: <Clock className="w-4 h-4" />,
@@ -150,7 +159,7 @@ function TypeSection({
           ? `${t.workingHoursStart}–${t.workingHoursEnd}`
           : "круглосуточно",
     });
-    if (t.minBookingHours) {
+    if (t.minBookingHours && !t.hasSlots) {
       meta.push({
         icon: <Sparkles className="w-4 h-4" />,
         text: `от ${t.minBookingHours} ч`,
@@ -186,7 +195,7 @@ function TypeSection({
                 <span>{m.text}</span>
               </li>
             ))}
-            {Number(t.extraGuestPrice) > 0 && (
+            {bookingMode !== "FULL_DAY" && Number(t.extraGuestPrice) > 0 && (
               <li className="flex items-center gap-2 text-muted-foreground">
                 <Users className="w-4 h-4 text-foreground" />
                 <span>
@@ -206,7 +215,14 @@ function TypeSection({
                   {priceFrom.toLocaleString("ru-RU")} ₽
                 </span>
                 <span className="text-sm text-muted-foreground ml-1">
-                  /{bookingMode === "DAILY" ? "сутки" : "час"}
+                  /
+                  {bookingMode === "DAILY"
+                    ? "сутки"
+                    : bookingMode === "FULL_DAY"
+                    ? "день"
+                    : t.hasSlots
+                    ? "слот"
+                    : "час"}
                 </span>
               </div>
             </div>

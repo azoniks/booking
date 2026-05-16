@@ -31,6 +31,8 @@ export interface CreateBookingArgs {
   // Для HOURLY со слотами:
   slotId?: string;
   slotDate?: string; // "YYYY-MM-DD"
+  // Для FULL_DAY: одна дата YYYY-MM-DD, бронь на весь рабочий день типа.
+  bookingDate?: string;
   guestsCount: number;
   guestName: string;
   guestEmail: string;
@@ -69,6 +71,13 @@ export async function createBooking(args: CreateBookingArgs) {
       throw new Error("Тип объекта не настроен (нет checkInTime/checkOutTime)");
     startAt = localDateTimeToUtc(args.checkInDate, t.checkInTime);
     endAt = localDateTimeToUtc(args.checkOutDate, t.checkOutTime);
+  } else if (mode === "FULL_DAY") {
+    if (!args.bookingDate)
+      throw new Error("bookingDate обязателен для FULL_DAY");
+    if (!t.workingHoursStart || !t.workingHoursEnd)
+      throw new Error("Тип объекта не настроен (нет workingHoursStart/End)");
+    startAt = localDateTimeToUtc(args.bookingDate, t.workingHoursStart);
+    endAt = localDateTimeToUtc(args.bookingDate, t.workingHoursEnd);
   } else if (args.slotId) {
     if (!args.slotDate) throw new Error("slotDate обязателен для slotId");
     const slot = t.slots.find((s) => s.id === args.slotId);

@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 
 export interface PricingInput {
-  bookingMode: "DAILY" | "HOURLY";
+  bookingMode: "DAILY" | "HOURLY" | "FULL_DAY";
   startAt: Date;
   endAt: Date;
   basePrice: Prisma.Decimal | number | string;
@@ -32,13 +32,26 @@ export function calcPrice(input: PricingInput): PricingResult {
     );
   }
 
+  const base = new Prisma.Decimal(input.basePrice);
+
+  // FULL_DAY — фиксированная цена за день, без множителя и без доплат
+  // за дополнительных гостей (бронь беседки целиком на день).
+  if (input.bookingMode === "FULL_DAY") {
+    return {
+      units: 1,
+      basePriceTotal: base,
+      extraGuests: 0,
+      extraGuestsCost: new Prisma.Decimal(0),
+      totalPrice: base,
+    };
+  }
+
   const ms = input.endAt.getTime() - input.startAt.getTime();
   const units =
     input.bookingMode === "DAILY"
       ? Math.max(1, Math.ceil(ms / DAY_MS))
       : Math.max(1, Math.ceil(ms / HOUR_MS));
 
-  const base = new Prisma.Decimal(input.basePrice);
   const extraPrice = new Prisma.Decimal(input.extraGuestPrice);
 
   const basePriceTotal = base.mul(units);

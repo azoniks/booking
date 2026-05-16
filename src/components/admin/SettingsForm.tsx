@@ -1,14 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AlertTriangle, CheckCircle2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Trash2, Upload as UploadIcon, ImageIcon } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { useFormDirty } from "./_hooks";
 
@@ -29,6 +29,7 @@ export function SettingsForm({ initial }: { initial: Initial }) {
     const data: Record<string, unknown> = {
       siteName: fd.get("siteName") || "",
       siteContact: fd.get("siteContact") || "",
+      mainSiteUrl: String(fd.get("mainSiteUrl") || "").trim(),
       adminNotifyEmails: String(fd.get("adminNotifyEmails") || "")
         .split(",").map((s) => s.trim()).filter(Boolean),
       paymentPercent: Math.max(1, Math.min(100, Number(fd.get("paymentPercent") || 100))),
@@ -98,7 +99,9 @@ export function SettingsForm({ initial }: { initial: Initial }) {
         </TabsList>
 
         {/* ─── Вкладка: Сайт ─── */}
-        <TabsContent value="site" className="space-y-6">
+        {/* forceMount + data-[state=inactive]:hidden — все поля всегда в DOM,
+            иначе при сабмите с другой вкладки FormData теряет их и затирает БД */}
+        <TabsContent value="site" forceMount className="space-y-6 data-[state=inactive]:hidden">
           <Card>
             <CardHeader>
               <CardTitle>Сайт</CardTitle>
@@ -111,6 +114,23 @@ export function SettingsForm({ initial }: { initial: Initial }) {
               <div>
                 <Label>Контакт (телефон/email для футера)</Label>
                 <Input name="siteContact" defaultValue={String(initial.siteContact ?? "")} />
+              </div>
+              <div className="md:col-span-2">
+                <Label>URL основного сайта</Label>
+                <Input
+                  name="mainSiteUrl"
+                  type="url"
+                  defaultValue={String(initial.mainSiteUrl ?? "")}
+                  placeholder="https://example.com"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Если задан — в шапке клиента и админки появится кнопка
+                  «На основной сайт».
+                </p>
+              </div>
+              <div className="md:col-span-2">
+                <Label>Логотип</Label>
+                <LogoUploader currentUrl={String(initial.siteLogoUrl ?? "")} />
               </div>
               <div className="md:col-span-2">
                 <Label>Email для уведомлений админу (через запятую)</Label>
@@ -142,7 +162,7 @@ export function SettingsForm({ initial }: { initial: Initial }) {
         </TabsContent>
 
         {/* ─── Вкладка: Эквайринг ─── */}
-        <TabsContent value="payments" className="space-y-6">
+        <TabsContent value="payments" forceMount className="space-y-6 data-[state=inactive]:hidden">
 
       {/* === Tinkoff === */}
       <Card>
@@ -209,7 +229,7 @@ export function SettingsForm({ initial }: { initial: Initial }) {
         </TabsContent>
 
         {/* ─── Вкладка: Уведомления ─── */}
-        <TabsContent value="notifications" className="space-y-6">
+        <TabsContent value="notifications" forceMount className="space-y-6 data-[state=inactive]:hidden">
           {/* Email (SMTP) */}
           <SmtpCard initial={initial} />
 
@@ -253,7 +273,7 @@ export function SettingsForm({ initial }: { initial: Initial }) {
               <TabsTrigger value="admin">Админу</TabsTrigger>
               <TabsTrigger value="client">Клиенту</TabsTrigger>
             </TabsList>
-            <TabsContent value="admin" className="space-y-3">
+            <TabsContent value="admin" forceMount className="space-y-3 data-[state=inactive]:hidden">
               <div>
                 <Label className="text-xs">Chat ID администратора</Label>
                 <Input
@@ -267,7 +287,7 @@ export function SettingsForm({ initial }: { initial: Initial }) {
               </div>
               <TestNotificationButton channel="telegram" />
             </TabsContent>
-            <TabsContent value="client" className="space-y-3">
+            <TabsContent value="client" forceMount className="space-y-3 data-[state=inactive]:hidden">
               <div className="flex items-center gap-2">
                 <input
                   type="checkbox"
@@ -338,7 +358,7 @@ export function SettingsForm({ initial }: { initial: Initial }) {
               <TabsTrigger value="admin">Админу</TabsTrigger>
               <TabsTrigger value="client">Клиенту</TabsTrigger>
             </TabsList>
-            <TabsContent value="admin" className="space-y-3">
+            <TabsContent value="admin" forceMount className="space-y-3 data-[state=inactive]:hidden">
               <div>
                 <Label className="text-xs">Chat ID администратора</Label>
                 <Input
@@ -349,7 +369,7 @@ export function SettingsForm({ initial }: { initial: Initial }) {
               </div>
               <TestNotificationButton channel="max" />
             </TabsContent>
-            <TabsContent value="client" className="space-y-3">
+            <TabsContent value="client" forceMount className="space-y-3 data-[state=inactive]:hidden">
               <div className="flex items-center gap-2">
                 <input
                   type="checkbox"
@@ -712,6 +732,110 @@ function EmailTestButton() {
       <p className="text-xs text-muted-foreground">
         Сначала сохраните настройки SMTP, затем нажмите «Отправить».
       </p>
+    </div>
+  );
+}
+
+function LogoUploader({ currentUrl }: { currentUrl: string }) {
+  const router = useRouter();
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function upload(file: File) {
+    setBusy(true);
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch("/api/admin/settings/logo", {
+      method: "POST",
+      body: fd,
+    });
+    const j = await res.json();
+    setBusy(false);
+    if (inputRef.current) inputRef.current.value = "";
+    if (!j.ok) {
+      toast({
+        title: "Ошибка",
+        description: j.error || "Не удалось загрузить логотип",
+        variant: "destructive",
+      });
+      return;
+    }
+    toast({ title: "Логотип загружен" });
+    router.refresh();
+  }
+
+  async function remove() {
+    if (!confirm("Удалить логотип?")) return;
+    setBusy(true);
+    const res = await fetch("/api/admin/settings/logo", { method: "DELETE" });
+    const j = await res.json();
+    setBusy(false);
+    if (!j.ok) {
+      toast({
+        title: "Ошибка",
+        description: j.error || "Не удалось удалить",
+        variant: "destructive",
+      });
+      return;
+    }
+    toast({ title: "Логотип удалён" });
+    router.refresh();
+  }
+
+  return (
+    <div className="border rounded-md p-3 bg-slate-50/50 flex items-center gap-4 flex-wrap">
+      <div className="h-16 w-16 rounded-md border bg-white flex items-center justify-center overflow-hidden shrink-0">
+        {currentUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={currentUrl}
+            alt="Логотип"
+            className="max-h-full max-w-full object-contain"
+          />
+        ) : (
+          <ImageIcon className="w-6 h-6 text-muted-foreground" />
+        )}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-xs text-muted-foreground mb-2">
+          PNG / JPG / WebP / SVG, рекомендуется горизонтальный или квадратный.
+          Показывается в шапке клиента и в админ-панели.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <input
+            ref={inputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/avif,image/gif,image/svg+xml"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) upload(f);
+            }}
+          />
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={busy}
+            onClick={() => inputRef.current?.click()}
+          >
+            <UploadIcon className="w-3 h-3 mr-1" />
+            {busy ? "..." : currentUrl ? "Заменить" : "Загрузить"}
+          </Button>
+          {currentUrl && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={busy}
+              onClick={remove}
+            >
+              <Trash2 className="w-3 h-3 mr-1" />
+              Удалить
+            </Button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

@@ -6,6 +6,8 @@ import { sendTelegram } from "./telegram";
 import { sendMax } from "./max";
 import { sendToGuestAll } from "./guest-messenger";
 
+const PAYMENT_RETRY_KIND = "payment_retry";
+
 export interface EmailConfig {
   enabled: boolean;
   host: string;
@@ -258,6 +260,53 @@ export async function sendPaidNotifications(bookingId: string) {
     // Клиенту в его подписанные мессенджеры
     sendToGuestAll(bookingId, guestText, "guest_paid"),
   ]);
+}
+
+/**
+ * Письмо клиенту о повторной попытке оплаты после отказа банка.
+ * Идемпотентно: при повторном вызове письмо не отправится повторно
+ * (проверяется по NotificationLog для kind="payment_retry").
+ */
+export async function sendPaymentRetryEmail(bookingId: string) {
+  const b = await prisma.booking.findUnique({
+    where: { id: bookingId },
+    include: { object: { include: { objectType: { include: { category: true } } } } },
+  });
+  if (!b) return;
+  if (b.status !== "PENDING") return;
+
+  const already = await prisma.notificationLog.count({
+    where: { bookingId, kind: PAYMENT_RETRY_KIND, status: "sent" },
+  });
+  if (already > 0) return;
+
+  const retryUrl = `${env.APP_URL}/booking/retry?code=${b.publicCode}`;
+  const elapsedMin = (Date.now() - b.createdAt.getTime()) / 60_000;
+  const remainingMin = Math.max(0, Math.ceil(env.PAYMENT_TIMEOUT_MINUTES - elapsedMin));
+
+  const text = [
+    `Здравствуйте, ${b.guestName}!`,
+    `К сожалению, оплата по брони ${b.publicCode} не прошла.`,
+    ``,
+    `Объект: ${b.object.name}`,
+    `Время: ${formatLocal(b.startAt)} — ${formatLocal(b.endAt)}`,
+    `Сумма к оплате: ${b.prepaymentAmount} ₽`,
+    ``,
+    `Вы можете повторить попытку оплаты по ссылке:`,
+    retryUrl,
+    ``,
+    remainingMin > 0
+      ? `Бронь будет автоматически отменена через ~${remainingMin} мин., если оплата не поступит.`
+      : `Срок оплаты истёк, бронь будет отменена в ближайшие минуты.`,
+  ].join("\n");
+
+  await sendEmail({
+    to: b.guestEmail,
+    subject: `Повторная оплата по брони ${b.publicCode}`,
+    text,
+    bookingId,
+    kind: PAYMENT_RETRY_KIND,
+  });
 }
 
 export async function sendReminder(bookingId: string) {

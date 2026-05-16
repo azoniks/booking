@@ -30,6 +30,7 @@ model Category {
 enum BookingMode {
   DAILY
   HOURLY
+  FULL_DAY
 }
 
 // === Тип объекта ===

@@ -143,3 +143,65 @@ export function AvailabilityCalendar({
     </div>
   );
 }
+
+/**
+ * Одиночный пикер для FULL_DAY: клиент выбирает один день целиком.
+ * Использует тот же расчёт занятости, что и range-вариант выше.
+ */
+export function SingleDayPicker({
+  busy,
+  cleaningMinutes,
+  selected,
+  onChange,
+}: {
+  busy: BusyInterval[];
+  cleaningMinutes: number;
+  selected: Date | undefined;
+  onChange: (date: Date | undefined) => void;
+}) {
+  const occupied = useMemo(
+    () => collectOccupiedDays(busy, cleaningMinutes),
+    [busy, cleaningMinutes],
+  );
+
+  const isPast = (d: Date) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return d < today;
+  };
+  const isBooked = (d: Date) => occupied.has(dateKey(d));
+  const isDisabled = (d: Date) => isPast(d) || isBooked(d);
+
+  return (
+    <div>
+      <div className="flex justify-center">
+        <DayPicker
+          mode="single"
+          selected={selected}
+          onSelect={onChange}
+          disabled={isDisabled}
+          modifiers={{ booked: isBooked, past: isPast }}
+          modifiersClassNames={{
+            booked: "bg-red-100 text-red-700 line-through",
+            past: "text-muted-foreground line-through opacity-50",
+          }}
+          locale={ru}
+          weekStartsOn={1}
+          showOutsideDays={false}
+          numberOfMonths={1}
+        />
+      </div>
+      <div className="mt-4 flex flex-wrap gap-3 text-xs text-muted-foreground">
+        <span className="flex items-center gap-1">
+          <span className="inline-block w-3 h-3 rounded-sm bg-[hsl(var(--primary))]" /> выбрано
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="inline-block w-3 h-3 rounded-sm bg-red-100" /> занято
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="inline-block w-3 h-3 rounded-sm bg-slate-200" /> прошло
+        </span>
+      </div>
+    </div>
+  );
+}

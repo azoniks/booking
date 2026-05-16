@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const BookingModeEnum = z.enum(["DAILY", "HOURLY"]);
+export const BookingModeEnum = z.enum(["DAILY", "HOURLY", "FULL_DAY"]);
 export const ObjectStatusEnum = z.enum(["ACTIVE", "HIDDEN", "MAINTENANCE"]);
 export const MediaTypeEnum = z.enum(["IMAGE", "VIDEO", "PANO360"]);
 
@@ -121,6 +121,8 @@ export const publicBookingSchema = z
     endAt: z.string().datetime().optional(),
     slotId: z.string().min(1).optional(),
     slotDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    // FULL_DAY: одна дата, бронь на весь рабочий день типа.
+    bookingDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
     guestsCount: z.coerce.number().int().min(1).max(50),
     guestName: z.string().min(2).max(100),
     guestEmail: z.string().email(),
@@ -138,6 +140,7 @@ export const adminBookingSchema = z.object({
   endAt: z.string().datetime().optional(),
   slotId: z.string().min(1).optional(),
   slotDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  bookingDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   guestsCount: z.coerce.number().int().min(1).max(50),
   guestName: z.string().min(2).max(100),
   guestEmail: z.string().email().or(z.literal("")).optional(),

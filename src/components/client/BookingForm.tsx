@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AvailabilityCalendar, type BusyInterval } from "./AvailabilityCalendar";
+import { AvailabilityCalendar, SingleDayPicker, type BusyInterval } from "./AvailabilityCalendar";
 import { HourlySlotsPicker } from "./HourlySlotsPicker";
 import { SlotPicker, type Slot } from "./SlotPicker";
 
@@ -62,7 +62,7 @@ function CalendarHint() {
 type ObjectInfo = {
   id: string;
   name: string;
-  bookingMode: "DAILY" | "HOURLY";
+  bookingMode: "DAILY" | "HOURLY" | "FULL_DAY";
   checkInTime: string | null;
   checkOutTime: string | null;
   hourlyStepMinutes: number;
@@ -110,6 +110,7 @@ function buildSlots(date: Date, start: string, end: string, step: number) {
 
 export function BookingForm({ object }: { object: ObjectInfo }) {
   const isDaily = object.bookingMode === "DAILY";
+  const isFullDay = object.bookingMode === "FULL_DAY";
   const minHours = Math.max(1, object.minBookingHours || 1);
 
   // DAILY: range — стартуем без выбора, чтобы первый клик задавал «from»
@@ -125,6 +126,9 @@ export function BookingForm({ object }: { object: ObjectInfo }) {
   const [slots, setSlots] = useState<Slot[]>([]);
   const [slotDate, setSlotDate] = useState<Date | undefined>(todayMSK());
   const [slotId, setSlotId] = useState<string | null>(null);
+
+  // FULL_DAY: одна дата
+  const [fullDayDate, setFullDayDate] = useState<Date | undefined>(undefined);
 
   const [guests, setGuests] = useState(object.baseCapacity);
   const [name, setName] = useState("");
@@ -179,10 +183,14 @@ export function BookingForm({ object }: { object: ObjectInfo }) {
     [hourlyDate, object.workingHoursStart, object.workingHoursEnd, object.hourlyStepMinutes],
   );
 
-  const useSlots = !isDaily && slots.length > 0;
+  const useSlots = !isDaily && !isFullDay && slots.length > 0;
 
   const price = useMemo(() => {
     const extra = Math.max(0, guests - object.baseCapacity);
+    if (isFullDay) {
+      // FULL_DAY: фиксированная цена за день, без множителя и без доплат за гостей.
+      return fullDayDate ? object.basePrice : 0;
+    }
     if (isDaily) {
       if (!range?.from || !range?.to) return 0;
       const units = Math.max(1, Math.ceil((range.to.getTime() - range.from.getTime()) / DAY_MS));
@@ -224,13 +232,24 @@ export function BookingForm({ object }: { object: ObjectInfo }) {
     object.extraGuestPrice,
   ]);
 
-  const canSubmit = isDaily
+  const canSubmit = isFullDay
+    ? !!fullDayDate
+    : isDaily
     ? !!(range?.from && range?.to && range.to > range.from)
     : useSlots
     ? !!(slotDate && slotId)
     : startIdx !== null && endIdx !== null && endIdx > startIdx;
 
   const summary = useMemo(() => {
+    if (isFullDay) {
+      if (!fullDayDate) return null;
+      return {
+        kind: "fullday" as const,
+        date: fullDayDate,
+        workingHoursStart: object.workingHoursStart || "09:00",
+        workingHoursEnd: object.workingHoursEnd || "21:00",
+      };
+    }
     if (isDaily) {
       if (!range?.from || !range?.to) return null;
       const nights = Math.max(
@@ -262,6 +281,7 @@ export function BookingForm({ object }: { object: ObjectInfo }) {
     return { kind: "hourly" as const, hours, startAt, endAt };
   }, [
     isDaily,
+    isFullDay,
     useSlots,
     range,
     slotDate,
@@ -270,8 +290,11 @@ export function BookingForm({ object }: { object: ObjectInfo }) {
     startIdx,
     endIdx,
     hourlySlots,
+    fullDayDate,
     object.checkInTime,
     object.checkOutTime,
+    object.workingHoursStart,
+    object.workingHoursEnd,
   ]);
 
   async function submit(e: React.FormEvent) {
@@ -287,7 +310,12 @@ export function BookingForm({ object }: { object: ObjectInfo }) {
         guestPhone: phone,
         guestComment: comment,
       };
-      if (isDaily) {
+      if (isFullDay) {
+        body = {
+          ...body,
+          bookingDate: isoDate(fullDayDate!),
+        };
+      } else if (isDaily) {
         body = {
           ...body,
           checkInDate: isoDate(range!.from!),
@@ -333,7 +361,21 @@ export function BookingForm({ object }: { object: ObjectInfo }) {
             <p className="text-xs text-muted-foreground">Загружаем занятость…</p>
           )}
 
-          {isDaily ? (
+          {isFullDay ? (
+            <div>
+              <Label className="mb-2 block">Дата</Label>
+              <SingleDayPicker
+                busy={busy}
+                cleaningMinutes={0}
+                selected={fullDayDate}
+                onChange={setFullDayDate}
+              />
+              <p className="text-xs text-muted-foreground mt-2">
+                Бронь на весь день: {object.workingHoursStart || "09:00"}–
+                {object.workingHoursEnd || "21:00"}
+              </p>
+            </div>
+          ) : isDaily ? (
             <div>
               <Label className="mb-2 flex items-center gap-1.5">
                 Даты заезда и выезда
@@ -394,7 +436,20 @@ export function BookingForm({ object }: { object: ObjectInfo }) {
           <div className="rounded-md border bg-muted/30 p-3 text-sm">
             <div className="font-semibold mb-1.5">Ваш выбор</div>
             {summary ? (
-              summary.kind === "daily" ? (
+              summary.kind === "fullday" ? (
+                <div className="space-y-1">
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">Дата</span>
+                    <span className="text-right">{dateFmt.format(summary.date)}</span>
+                  </div>
+                  <div className="flex justify-between gap-2 border-t pt-1.5 mt-1.5 font-medium">
+                    <span>Время</span>
+                    <span>
+                      {summary.workingHoursStart}–{summary.workingHoursEnd}
+                    </span>
+                  </div>
+                </div>
+              ) : summary.kind === "daily" ? (
                 <div className="space-y-1">
                   <div className="flex justify-between gap-2">
                     <span className="text-muted-foreground">Заезд</span>
@@ -452,7 +507,9 @@ export function BookingForm({ object }: { object: ObjectInfo }) {
               )
             ) : (
               <div className="text-xs text-muted-foreground">
-                {isDaily
+                {isFullDay
+                  ? "Выберите дату — бронь оформляется на весь день"
+                  : isDaily
                   ? "Выберите дату заезда (один клик — одна ночь, два клика — несколько ночей)"
                   : useSlots
                   ? "Выберите дату и слот"
@@ -472,7 +529,9 @@ export function BookingForm({ object }: { object: ObjectInfo }) {
               required
             />
             <p className="text-xs text-muted-foreground mt-1">
-              {object.baseCapacity} включено · доплата за допместо {object.extraGuestPrice} ₽
+              {isFullDay
+                ? `до ${object.maxCapacity} гостей включено`
+                : `${object.baseCapacity} включено · доплата за допместо ${object.extraGuestPrice} ₽`}
             </p>
           </div>
 

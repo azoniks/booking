@@ -15,11 +15,13 @@ export function ObjectCard({
   bookingMode,
   priceFrom,
   capacity,
+  hasSlots = false,
 }: {
   obj: ObjectCardData;
-  bookingMode: "DAILY" | "HOURLY";
+  bookingMode: "DAILY" | "HOURLY" | "FULL_DAY";
   priceFrom: number;
   capacity: number;
+  hasSlots?: boolean;
 }) {
   const main = obj.media.find((m) => m.isMain) ?? obj.media[0];
   return (
@@ -50,7 +52,13 @@ export function ObjectCard({
           )}
           <div className="mt-3 text-sm">
             от <span className="font-bold">{priceFrom.toLocaleString("ru-RU")} ₽</span>
-            {bookingMode === "DAILY" ? "/сутки" : "/час"}
+            {bookingMode === "DAILY"
+              ? "/сутки"
+              : bookingMode === "FULL_DAY"
+              ? "/день"
+              : hasSlots
+              ? "/слот"
+              : "/час"}
           </div>
         </CardContent>
       </Card>

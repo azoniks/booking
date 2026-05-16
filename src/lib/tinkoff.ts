@@ -10,6 +10,59 @@ interface TinkoffInitResponse {
   PaymentURL?: string;
 }
 
+type TinkoffTax = "none" | "vat0" | "vat10" | "vat20" | "vat110" | "vat120";
+type TinkoffTaxation =
+  | "osn"
+  | "usn_income"
+  | "usn_income_outcome"
+  | "patent"
+  | "envd"
+  | "esn";
+type TinkoffPaymentMethod =
+  | "full_prepayment"
+  | "prepayment"
+  | "advance"
+  | "full_payment"
+  | "partial_payment"
+  | "credit"
+  | "credit_payment";
+type TinkoffPaymentObject =
+  | "commodity"
+  | "excise"
+  | "job"
+  | "service"
+  | "gambling_bet"
+  | "gambling_prize"
+  | "lottery"
+  | "lottery_prize"
+  | "intellectual_activity"
+  | "payment"
+  | "agent_commission"
+  | "composite"
+  | "another";
+
+interface TinkoffReceiptItem {
+  Name: string;
+  Price: number;
+  Quantity: number;
+  Amount: number;
+  Tax: TinkoffTax;
+  PaymentMethod: TinkoffPaymentMethod;
+  PaymentObject: TinkoffPaymentObject;
+}
+
+interface TinkoffReceipt {
+  Email?: string;
+  Phone?: string;
+  Taxation: TinkoffTaxation;
+  Items: TinkoffReceiptItem[];
+}
+
+const RECEIPT_TAXATION: TinkoffTaxation = "usn_income_outcome";
+const RECEIPT_TAX: TinkoffTax = "none";
+const RECEIPT_PAYMENT_METHOD: TinkoffPaymentMethod = "prepayment";
+const RECEIPT_PAYMENT_OBJECT: TinkoffPaymentObject = "service";
+
 export type TinkoffMode = "mock" | "test" | "production";
 
 export interface TinkoffConfig {
@@ -96,11 +149,54 @@ export function mockSign(bookingId: string): string {
   return createHmac("sha256", env.MOCK_PAYMENT_SECRET).update(bookingId).digest("hex");
 }
 
+function normalizePhone(raw: string): string {
+  const digits = raw.replace(/\D/g, "");
+  if (!digits) return "";
+  if (raw.trim().startsWith("+")) return `+${digits}`;
+  if (digits.length === 11 && digits.startsWith("8")) return `+7${digits.slice(1)}`;
+  if (digits.length === 11 && digits.startsWith("7")) return `+${digits}`;
+  if (digits.length === 10) return `+7${digits}`;
+  return `+${digits}`;
+}
+
+function buildReceipt(
+  booking: {
+    guestEmail: string;
+    guestPhone: string;
+    publicCode: string;
+    object: { name: string };
+  },
+  amountKopecks: number,
+): TinkoffReceipt {
+  const itemName = `Предоплата за бронь ${booking.publicCode} — ${booking.object.name}`.slice(0, 128);
+  const item: TinkoffReceiptItem = {
+    Name: itemName,
+    Price: amountKopecks,
+    Quantity: 1,
+    Amount: amountKopecks,
+    Tax: RECEIPT_TAX,
+    PaymentMethod: RECEIPT_PAYMENT_METHOD,
+    PaymentObject: RECEIPT_PAYMENT_OBJECT,
+  };
+  const receipt: TinkoffReceipt = {
+    Taxation: RECEIPT_TAXATION,
+    Items: [item],
+  };
+  const email = booking.guestEmail.trim();
+  if (email) receipt.Email = email;
+  const phone = normalizePhone(booking.guestPhone);
+  if (phone) receipt.Phone = phone;
+  return receipt;
+}
+
 export async function initPayment(bookingId: string): Promise<{
   confirmationUrl: string;
   paymentId: string;
 }> {
-  const booking = await prisma.booking.findUnique({ where: { id: bookingId } });
+  const booking = await prisma.booking.findUnique({
+    where: { id: bookingId },
+    include: { object: true },
+  });
   if (!booking) throw new Error("Бронь не найдена");
   const payAmount = booking.prepaymentAmount;
   const amountKopecks = Math.round(Number(payAmount) * 100);
@@ -132,10 +228,15 @@ export async function initPayment(bookingId: string): Promise<{
     );
   }
 
+  // OrderId должен быть уникален в пределах мерчанта (Tinkoff).
+  // Для повторных попыток оплаты (после REJECTED) добавляем суффикс,
+  // иначе вторая попытка с тем же OrderId падает у банка.
+  const orderId = `${booking.publicCode}-${Date.now().toString(36)}`;
+
   const params: Record<string, string | number> = {
     TerminalKey: cfg.terminalKey,
     Amount: amountKopecks,
-    OrderId: booking.publicCode,
+    OrderId: orderId,
     Description: `Бронь ${booking.publicCode} (предоплата)`,
     SuccessURL: `${env.APP_URL}/booking/success?code=${booking.publicCode}`,
     FailURL: `${env.APP_URL}/booking/failed?code=${booking.publicCode}`,
@@ -143,10 +244,14 @@ export async function initPayment(bookingId: string): Promise<{
   };
   const Token = signTinkoff(params, cfg.password);
 
+  // Receipt не участвует в подсчёте Token (Tinkoff игнорирует объекты при
+  // формировании подписи), поэтому добавляем его в тело уже после signTinkoff.
+  const Receipt = buildReceipt(booking, amountKopecks);
+
   const res = await fetch(`${cfg.apiUrl}/Init`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ...params, Token }),
+    body: JSON.stringify({ ...params, Token, Receipt }),
   });
   const data = (await res.json()) as TinkoffInitResponse;
 

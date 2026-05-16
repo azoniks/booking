@@ -18,7 +18,7 @@ type TypeRow = {
   id: string;
   name: string;
   categoryName: string;
-  bookingMode: "DAILY" | "HOURLY";
+  bookingMode: "DAILY" | "HOURLY" | "FULL_DAY";
   cleaningMinutes: number;
   objects: ObjectRow[];
 };

@@ -34,7 +34,7 @@ type Type = {
   description: string | null;
   categoryId: string;
   categoryName: string;
-  bookingMode: "DAILY" | "HOURLY";
+  bookingMode: "DAILY" | "HOURLY" | "FULL_DAY";
   checkInTime: string | null;
   checkOutTime: string | null;
   hourlyStepMinutes: number | null;
@@ -53,7 +53,7 @@ type Type = {
   media: TypeMedia[];
 };
 
-type Category = { id: string; name: string; bookingMode: "DAILY" | "HOURLY" };
+type Category = { id: string; name: string; bookingMode: "DAILY" | "HOURLY" | "FULL_DAY" };
 
 export function ObjectTypesManager({
   initialTypes,
@@ -92,6 +92,15 @@ export function ObjectTypesManager({
       data.hourlyStepMinutes = null;
       data.workingHoursStart = null;
       data.workingHoursEnd = null;
+      data.minBookingHours = null;
+      data.maxBookingHours = null;
+    } else if (mode === "FULL_DAY") {
+      // День: только рабочие часы (с/до), всё остальное обнуляем.
+      data.workingHoursStart = form.get("workingHoursStart") || null;
+      data.workingHoursEnd = form.get("workingHoursEnd") || null;
+      data.checkInTime = null;
+      data.checkOutTime = null;
+      data.hourlyStepMinutes = null;
       data.minBookingHours = null;
       data.maxBookingHours = null;
     } else {
@@ -169,6 +178,8 @@ export function ObjectTypesManager({
                     <div className="text-sm text-muted-foreground mt-1 space-y-0.5">
                       {t.bookingMode === "DAILY" ? (
                         <div>Заезд {t.checkInTime} → выезд {t.checkOutTime}</div>
+                      ) : t.bookingMode === "FULL_DAY" ? (
+                        <div>Весь день: {t.workingHoursStart}–{t.workingHoursEnd}</div>
                       ) : (
                         <div>
                           Шаг {t.hourlyStepMinutes} мин · {t.workingHoursStart}–{t.workingHoursEnd} ·
@@ -196,6 +207,7 @@ export function ObjectTypesManager({
               {editing?.id !== t.id && (
                 <>
                   <TypeMediaEditor typeId={t.id} initial={t.media} />
+                  {/* Слоты только для HOURLY; FULL_DAY и DAILY их не используют. */}
                   {t.bookingMode === "HOURLY" && (
                     <SlotsEditor typeId={t.id} initial={t.slots} />
                   )}
@@ -236,18 +248,6 @@ function SlotsEditor({ typeId, initial }: { typeId: string; initial: Slot[] }) {
     toast({ title: "Слот создан" });
     formRef.current?.reset();
     setOpen(false);
-    router.refresh();
-  }
-
-  async function del(id: string) {
-    if (!confirm("Удалить слот?")) return;
-    const res = await fetch(`/api/admin/slots/${id}`, { method: "DELETE" });
-    const j = await res.json();
-    if (!j.ok) {
-      toast({ title: "Ошибка", description: j.error || "Не удалось удалить слот", variant: "destructive" });
-      return;
-    }
-    toast({ title: "Слот удалён" });
     router.refresh();
   }
 
@@ -302,34 +302,164 @@ function SlotsEditor({ typeId, initial }: { typeId: string; initial: Slot[] }) {
 
       {initial.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-          {initial.map((s) => {
-            const [sh, sm] = s.startTime.split(":").map(Number);
-            const [eh, em] = s.endTime.split(":").map(Number);
-            const crosses = eh * 60 + em <= sh * 60 + sm;
-            return (
-              <div
-                key={s.id}
-                className="flex items-center justify-between p-2 rounded-md border"
-              >
-                <div className="text-sm">
-                  <span className="font-medium">{s.name}</span>{" "}
-                  <span className="text-muted-foreground">
-                    {s.startTime}–{s.endTime}{crosses && " (след. день)"}
-                  </span>
-                  {s.priceOverride && (
-                    <span className="ml-2 text-xs text-muted-foreground">
-                      · {s.priceOverride} ₽
-                    </span>
-                  )}
-                </div>
-                <Button size="icon" variant="outline" onClick={() => del(s.id)}>
-                  <Trash2 className="w-3 h-3" />
-                </Button>
-              </div>
-            );
-          })}
+          {initial.map((s) => (
+            <SlotRow key={s.id} slot={s} />
+          ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function SlotRow({ slot }: { slot: Slot }) {
+  const router = useRouter();
+  const [editing, setEditing] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  async function save(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setBusy(true);
+    const fd = new FormData(e.currentTarget);
+    const priceRaw = fd.get("priceOverride");
+    const priceTrim = priceRaw == null ? "" : String(priceRaw).trim();
+    const res = await fetch(`/api/admin/slots/${slot.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: fd.get("name"),
+        startTime: fd.get("startTime"),
+        endTime: fd.get("endTime"),
+        priceOverride: priceTrim !== "" ? Number(priceTrim) : null,
+        sortOrder: Number(fd.get("sortOrder") || 0),
+      }),
+    });
+    const j = await res.json();
+    setBusy(false);
+    if (!j.ok) {
+      toast({
+        title: "Ошибка",
+        description: j.error || "Не удалось сохранить слот",
+        variant: "destructive",
+      });
+      return;
+    }
+    toast({ title: "Слот сохранён" });
+    setEditing(false);
+    router.refresh();
+  }
+
+  async function del() {
+    if (!confirm("Удалить слот?")) return;
+    const res = await fetch(`/api/admin/slots/${slot.id}`, { method: "DELETE" });
+    const j = await res.json();
+    if (!j.ok) {
+      toast({
+        title: "Ошибка",
+        description: j.error || "Не удалось удалить слот",
+        variant: "destructive",
+      });
+      return;
+    }
+    toast({ title: "Слот удалён" });
+    router.refresh();
+  }
+
+  if (editing) {
+    return (
+      <form
+        onSubmit={save}
+        className="md:col-span-2 grid grid-cols-2 md:grid-cols-5 gap-2 p-2 rounded-md border bg-slate-50"
+      >
+        <div>
+          <Label className="text-xs">Название</Label>
+          <Input name="name" required defaultValue={slot.name} />
+        </div>
+        <div>
+          <Label className="text-xs">Начало</Label>
+          <Input
+            name="startTime"
+            required
+            defaultValue={slot.startTime}
+            pattern="\d{2}:\d{2}"
+          />
+        </div>
+        <div>
+          <Label className="text-xs">Конец</Label>
+          <Input
+            name="endTime"
+            required
+            defaultValue={slot.endTime}
+            pattern="\d{2}:\d{2}"
+          />
+        </div>
+        <div>
+          <Label className="text-xs">Цена ₽ (опц.)</Label>
+          <Input
+            name="priceOverride"
+            type="number"
+            step="0.01"
+            defaultValue={slot.priceOverride ?? ""}
+            placeholder="по basePrice"
+          />
+        </div>
+        <div>
+          <Label className="text-xs">Порядок</Label>
+          <Input name="sortOrder" type="number" defaultValue={slot.sortOrder} />
+        </div>
+        <div className="col-span-2 md:col-span-5 flex gap-2 justify-end">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => setEditing(false)}
+            disabled={busy}
+          >
+            Отмена
+          </Button>
+          <Button type="submit" size="sm" disabled={busy}>
+            {busy ? "Сохранение…" : "Сохранить"}
+          </Button>
+        </div>
+      </form>
+    );
+  }
+
+  const [sh, sm] = slot.startTime.split(":").map(Number);
+  const [eh, em] = slot.endTime.split(":").map(Number);
+  const crosses = eh * 60 + em <= sh * 60 + sm;
+
+  return (
+    <div className="flex items-center justify-between p-2 rounded-md border gap-2">
+      <div className="text-sm min-w-0">
+        <span className="font-medium">{slot.name}</span>{" "}
+        <span className="text-muted-foreground">
+          {slot.startTime}–{slot.endTime}
+          {crosses && " (след. день)"}
+        </span>
+        {slot.priceOverride && (
+          <span className="ml-2 text-xs text-muted-foreground">
+            · {slot.priceOverride} ₽
+          </span>
+        )}
+      </div>
+      <div className="flex gap-1 shrink-0">
+        <Button
+          size="icon"
+          variant="outline"
+          onClick={() => setEditing(true)}
+          aria-label="Редактировать"
+        >
+          <Pencil className="w-3 h-3" />
+        </Button>
+        <Button
+          size="icon"
+          variant="outline"
+          onClick={del}
+          aria-label="Удалить"
+        >
+          <Trash2 className="w-3 h-3" />
+        </Button>
+      </div>
     </div>
   );
 }
@@ -502,7 +632,7 @@ function TypeForm({
         >
           {categories.map((c) => (
             <option key={c.id} value={c.id}>
-              {c.name} ({c.bookingMode === "DAILY" ? "сутки" : "часы"})
+              {c.name} ({c.bookingMode === "DAILY" ? "сутки" : c.bookingMode === "FULL_DAY" ? "день" : "часы"})
             </option>
           ))}
         </select>
@@ -521,6 +651,18 @@ function TypeForm({
           <div>
             <Label>Время выезда</Label>
             <Input name="checkOutTime" defaultValue={initial?.checkOutTime ?? "12:00"} placeholder="12:00" />
+          </div>
+          <div></div>
+        </>
+      ) : mode === "FULL_DAY" ? (
+        <>
+          <div>
+            <Label>Работа с</Label>
+            <Input name="workingHoursStart" defaultValue={initial?.workingHoursStart ?? "09:00"} placeholder="09:00" />
+          </div>
+          <div>
+            <Label>Работа до</Label>
+            <Input name="workingHoursEnd" defaultValue={initial?.workingHoursEnd ?? "21:00"} placeholder="21:00" />
           </div>
           <div></div>
         </>
@@ -563,7 +705,7 @@ function TypeForm({
         <Input name="maxCapacity" type="number" defaultValue={initial?.maxCapacity ?? 4} />
       </div>
       <div>
-        <Label>Базовая цена ({mode === "DAILY" ? "за сутки" : "за час"}), ₽</Label>
+        <Label>Базовая цена ({mode === "DAILY" ? "за сутки" : mode === "FULL_DAY" ? "за день" : "за час"}), ₽</Label>
         <Input name="basePrice" type="number" step="0.01" defaultValue={initial?.basePrice ?? 0} />
       </div>
       <div>

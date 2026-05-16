@@ -11,6 +11,14 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "@/components/ui/use-toast";
 import { useFormDirty } from "./_hooks";
 
+type BookingMode = "DAILY" | "HOURLY" | "FULL_DAY";
+
+const BOOKING_MODE_LABEL: Record<BookingMode, string> = {
+  DAILY: "сутки",
+  HOURLY: "часы",
+  FULL_DAY: "день",
+};
+
 type Category = {
   id: string;
   name: string;
@@ -18,7 +26,7 @@ type Category = {
   description: string | null;
   sortOrder: number;
   isVisible: boolean;
-  bookingMode: "DAILY" | "HOURLY";
+  bookingMode: BookingMode;
   typesCount: number;
 };
 
@@ -89,7 +97,7 @@ export function CategoriesManager({ initial }: { initial: Category[] }) {
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-semibold">{c.name}</span>
-                      <Badge variant="secondary">{c.bookingMode === "DAILY" ? "сутки" : "часы"}</Badge>
+                      <Badge variant="secondary">{BOOKING_MODE_LABEL[c.bookingMode]}</Badge>
                       {!c.isVisible && <Badge variant="outline">скрыта</Badge>}
                       <span className="text-xs text-muted-foreground">/{c.slug}</span>
                     </div>
@@ -160,6 +168,7 @@ function CategoryForm({
         >
           <option value="DAILY">Сутки (номера)</option>
           <option value="HOURLY">Часы</option>
+          <option value="FULL_DAY">День (беседки/площадки целиком на день)</option>
         </select>
       </div>
       <div>
