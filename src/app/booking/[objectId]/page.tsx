@@ -37,6 +37,14 @@ export default async function BookingPage({ params }: { params: Promise<{ object
       icon: <Calendar className="w-4 h-4" />,
       text: `заезд ${t.checkInTime}, выезд ${t.checkOutTime}`,
     });
+  } else if (mode === "FULL_DAY") {
+    facts.push({
+      icon: <Clock className="w-4 h-4" />,
+      text:
+        t.workingHoursStart && t.workingHoursEnd
+          ? `весь день: ${t.workingHoursStart}–${t.workingHoursEnd}`
+          : "весь день",
+    });
   } else {
     facts.push({
       icon: <Clock className="w-4 h-4" />,
@@ -58,10 +66,12 @@ export default async function BookingPage({ params }: { params: Promise<{ object
       text: `время на уборку ${t.cleaningMinutes} мин`,
     });
   }
+  const unitLabel =
+    mode === "DAILY" ? "сутки" : mode === "FULL_DAY" ? "день" : "час";
   facts.push({
     icon: <Tag className="w-4 h-4" />,
-    text: `от ${basePrice.toLocaleString("ru-RU")} ₽ / ${mode === "DAILY" ? "сутки" : "час"}${
-      Number(t.extraGuestPrice) > 0
+    text: `от ${basePrice.toLocaleString("ru-RU")} ₽ / ${unitLabel}${
+      mode !== "FULL_DAY" && Number(t.extraGuestPrice) > 0
         ? ` · доплата ${Math.round(Number(t.extraGuestPrice))} ₽ за допместо`
         : ""
     }`,

@@ -219,6 +219,7 @@ export function BookingForm({ object }: { object: ObjectInfo }) {
     return units * object.basePrice + extra * object.extraGuestPrice * units;
   }, [
     isDaily,
+    isFullDay,
     useSlots,
     range,
     slotId,
@@ -226,6 +227,7 @@ export function BookingForm({ object }: { object: ObjectInfo }) {
     startIdx,
     endIdx,
     hourlySlots,
+    fullDayDate,
     guests,
     object.baseCapacity,
     object.basePrice,
