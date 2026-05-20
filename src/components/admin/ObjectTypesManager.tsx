@@ -6,10 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Trash2, Pencil, Upload, Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/components/ui/use-toast";
 import { useFormDirty } from "./_hooks";
+import { RichTextEditor } from "./RichTextEditor";
 
 export type Slot = {
   id: string;
@@ -47,7 +49,10 @@ type Type = {
   maxCapacity: number;
   basePrice: string;
   extraGuestPrice: string;
+  paymentType: "PERCENT" | "FIXED";
   paymentPercent: number | null;
+  paymentAmount: string | null;
+  sortOrder: number;
   sectionsTotal: number | null;
   sectionCapacity: number | null;
   sectionsBookingMax: number | null;
@@ -69,6 +74,13 @@ export function ObjectTypesManager({
   const router = useRouter();
   const [editing, setEditing] = useState<Type | null>(null);
   const [creating, setCreating] = useState(false);
+  const [activeCat, setActiveCat] = useState<string>("ALL");
+  const visibleTypes =
+    activeCat === "ALL"
+      ? initialTypes
+      : initialTypes.filter((t) => t.categoryId === activeCat);
+  const createDefaultCat =
+    activeCat !== "ALL" ? activeCat : undefined;
 
   async function save(form: FormData, categoryId: string, id?: string) {
     // categoryId передаётся явно из локального state TypeForm: при редактировании
@@ -77,7 +89,6 @@ export function ObjectTypesManager({
     const cat = categories.find((c) => c.id === categoryId);
     const mode = cat?.bookingMode || "DAILY";
 
-    const ppRaw = form.get("paymentPercent");
     const optInt = (key: string): number | null => {
       const raw = form.get(key);
       const s = raw == null ? "" : String(raw).trim();
@@ -88,6 +99,7 @@ export function ObjectTypesManager({
       const s = raw == null ? "" : String(raw).trim();
       return s === "" ? null : Number(s);
     };
+    const paymentType = (form.get("paymentType") as "PERCENT" | "FIXED") || "PERCENT";
     const data: Record<string, unknown> = {
       name: form.get("name"),
       description: form.get("description") || null,
@@ -96,7 +108,11 @@ export function ObjectTypesManager({
       maxCapacity: Number(form.get("maxCapacity") || 1),
       basePrice: Number(form.get("basePrice") || 0),
       extraGuestPrice: Number(form.get("extraGuestPrice") || 0),
-      paymentPercent: ppRaw && String(ppRaw).trim() !== "" ? Number(ppRaw) : null,
+      sortOrder: Number(form.get("sortOrder") || 0),
+      paymentType,
+      // В FIXED режиме paymentPercent очищаем, в PERCENT — paymentAmount.
+      paymentPercent: paymentType === "PERCENT" ? optInt("paymentPercent") : null,
+      paymentAmount: paymentType === "FIXED" ? optDecimal("paymentAmount") : null,
     };
     if (!id) data.categoryId = categoryId;
 
@@ -170,6 +186,22 @@ export function ObjectTypesManager({
 
   return (
     <div className="space-y-4">
+      {categories.length > 0 && (
+        <Tabs value={activeCat} onValueChange={setActiveCat}>
+          <TabsList>
+            <TabsTrigger value="ALL">Все ({initialTypes.length})</TabsTrigger>
+            {categories.map((c) => {
+              const count = initialTypes.filter((t) => t.categoryId === c.id).length;
+              return (
+                <TabsTrigger key={c.id} value={c.id}>
+                  {c.name} ({count})
+                </TabsTrigger>
+              );
+            })}
+          </TabsList>
+        </Tabs>
+      )}
+
       <Button onClick={() => { setCreating(true); setEditing(null); }}>+ Новый тип</Button>
 
       {creating && (
@@ -177,6 +209,7 @@ export function ObjectTypesManager({
           <CardContent className="p-4">
             <TypeForm
               categories={categories}
+              defaultCategoryId={createDefaultCat}
               onSubmit={(fd, catId) => save(fd, catId)}
               onCancel={() => setCreating(false)}
             />
@@ -185,7 +218,10 @@ export function ObjectTypesManager({
       )}
 
       <div className="grid gap-3">
-        {initialTypes.map((t) => (
+        {visibleTypes.length === 0 && (
+          <p className="text-sm text-muted-foreground">В этой категории пока нет типов</p>
+        )}
+        {visibleTypes.map((t) => (
           <Card key={t.id}>
             <CardContent className="p-4">
               {editing?.id === t.id ? (
@@ -216,7 +252,11 @@ export function ObjectTypesManager({
                       <div>
                         Уборка {t.cleaningMinutes} мин · вместимость {t.baseCapacity}/{t.maxCapacity} ·
                         цена {t.basePrice} ₽ + {t.extraGuestPrice} ₽/допместо
-                        {t.paymentPercent !== null && ` · предоплата ${t.paymentPercent}%`}
+                        {t.paymentType === "FIXED" && t.paymentAmount
+                          ? ` · предоплата ${t.paymentAmount} ₽`
+                          : t.paymentPercent !== null
+                            ? ` · предоплата ${t.paymentPercent}%`
+                            : ""}
                       </div>
                       {t.sectionsTotal && t.sectionCapacity && (
                         <div>
@@ -225,7 +265,7 @@ export function ObjectTypesManager({
                           {t.fullVenuePrice && ` · вся площадка ${t.fullVenuePrice} ₽`}
                         </div>
                       )}
-                      <div>Объектов: {t.objectsCount}</div>
+                      <div>Объектов: {t.objectsCount} · Порядок: {t.sortOrder}</div>
                     </div>
                   </div>
                   <div className="flex gap-2 shrink-0">
@@ -628,17 +668,24 @@ function TypeMediaEditor({ typeId, initial }: { typeId: string; initial: TypeMed
 function TypeForm({
   initial,
   categories,
+  defaultCategoryId,
   onSubmit,
   onCancel,
 }: {
   initial?: Type;
   categories: Category[];
+  defaultCategoryId?: string;
   onSubmit: (fd: FormData, categoryId: string) => void;
   onCancel: () => void;
 }) {
-  const [categoryId, setCategoryId] = useState(initial?.categoryId || categories[0]?.id || "");
+  const [categoryId, setCategoryId] = useState(
+    initial?.categoryId || defaultCategoryId || categories[0]?.id || "",
+  );
   const cat = categories.find((c) => c.id === categoryId);
   const mode = cat?.bookingMode || "DAILY";
+  const [paymentType, setPaymentType] = useState<"PERCENT" | "FIXED">(
+    initial?.paymentType || "PERCENT",
+  );
   const { dirty, formProps } = useFormDirty();
   const isEdit = !!initial;
 
@@ -671,11 +718,6 @@ function TypeForm({
           ))}
         </select>
       </div>
-      <div className="md:col-span-3">
-        <Label>Описание</Label>
-        <Input name="description" defaultValue={initial?.description ?? ""} />
-      </div>
-
       {mode === "DAILY" ? (
         <>
           <div>
@@ -747,15 +789,61 @@ function TypeForm({
         <Input name="extraGuestPrice" type="number" step="0.01" defaultValue={initial?.extraGuestPrice ?? 0} />
       </div>
       <div>
-        <Label>% предоплаты (пусто = глобально)</Label>
-        <Input
-          name="paymentPercent"
-          type="number"
-          min={1}
-          max={100}
-          defaultValue={initial?.paymentPercent ?? ""}
-          placeholder="например, 30"
-        />
+        <Label>Порядок</Label>
+        <Input name="sortOrder" type="number" defaultValue={initial?.sortOrder ?? 0} />
+      </div>
+      <div className="md:col-span-3 border rounded-md p-3 bg-slate-50/50 space-y-3">
+        <div className="text-sm font-semibold">Предоплата</div>
+        <input type="hidden" name="paymentType" value={paymentType} />
+        <div className="flex gap-2 flex-wrap">
+          <label className="inline-flex items-center gap-2 cursor-pointer text-sm">
+            <input
+              type="radio"
+              checked={paymentType === "PERCENT"}
+              onChange={() => { setPaymentType("PERCENT"); formProps.onChange(); }}
+            />
+            % от суммы
+          </label>
+          <label className="inline-flex items-center gap-2 cursor-pointer text-sm">
+            <input
+              type="radio"
+              checked={paymentType === "FIXED"}
+              onChange={() => { setPaymentType("FIXED"); formProps.onChange(); }}
+            />
+            Фиксированная сумма
+          </label>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {paymentType === "PERCENT" ? (
+            <div>
+              <Label className="text-xs">% предоплаты (пусто = глобально)</Label>
+              <Input
+                name="paymentPercent"
+                type="number"
+                min={1}
+                max={100}
+                defaultValue={initial?.paymentPercent ?? ""}
+                placeholder="например, 30"
+              />
+            </div>
+          ) : (
+            <div>
+              <Label className="text-xs">Фикс. сумма предоплаты, ₽</Label>
+              <Input
+                name="paymentAmount"
+                type="number"
+                step="0.01"
+                min={0}
+                required
+                defaultValue={initial?.paymentAmount ?? ""}
+                placeholder="например, 1000"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Если больше суммы брони — спишется только сумма брони.
+              </p>
+            </div>
+          )}
+        </div>
       </div>
 
       {mode === "FULL_DAY" && (
@@ -817,6 +905,17 @@ function TypeForm({
           </p>
         </div>
       )}
+
+      <div className="md:col-span-3">
+        <Label>Описание</Label>
+        <RichTextEditor
+          name="description"
+          defaultValue={initial?.description ?? ""}
+          placeholder="Например: уютный номер с видом на сад"
+          maxLength={5000}
+          onChange={formProps.onChange}
+        />
+      </div>
 
       <div className="md:col-span-3 flex gap-2 justify-end">
         <Button type="button" variant="outline" onClick={onCancel}>Отмена</Button>

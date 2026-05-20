@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { Users } from "lucide-react";
+import { richTextToPlain } from "@/lib/sanitize";
 
 export type ObjectCardData = {
   id: string;
@@ -48,7 +49,9 @@ export function ObjectCard({
             </div>
           </div>
           {obj.description && (
-            <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{obj.description}</p>
+            <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+              {richTextToPlain(obj.description)}
+            </p>
           )}
           <div className="mt-3 text-sm">
             от <span className="font-bold">{priceFrom.toLocaleString("ru-RU")} ₽</span>

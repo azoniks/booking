@@ -68,10 +68,12 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
           <div>Базовая стоимость: {formatRub(b.basePrice.toString())}</div>
           <div>Допгости: {b.extraGuests} ({formatRub(b.extraGuestsCost.toString())})</div>
           <div className="font-semibold pt-1">Итого: {formatRub(b.totalPrice.toString())}</div>
-          {b.paymentPercent < 100 && (
+          {Number(b.prepaymentAmount) > 0 && Number(b.prepaymentAmount) < Number(b.totalPrice) && (
             <>
               <div className="pt-1">
-                Предоплата ({b.paymentPercent}%): {formatRub(b.prepaymentAmount.toString())}
+                Предоплата
+                {b.paymentType === "FIXED" ? " (фикс. сумма)" : ` (${b.paymentPercent}%)`}
+                : {formatRub(b.prepaymentAmount.toString())}
               </div>
               <div>
                 Остаток к оплате на месте:{" "}

@@ -3,6 +3,7 @@ import { z } from "zod";
 export const BookingModeEnum = z.enum(["DAILY", "HOURLY", "FULL_DAY"]);
 export const ObjectStatusEnum = z.enum(["ACTIVE", "HIDDEN", "MAINTENANCE"]);
 export const MediaTypeEnum = z.enum(["IMAGE", "VIDEO", "PANO360"]);
+export const PrepaymentTypeEnum = z.enum(["PERCENT", "FIXED"]);
 
 export const HHMM = z
   .string()
@@ -26,6 +27,23 @@ const sectionsFields = {
   fullVenuePrice: z.coerce.number().nonnegative().optional().nullable(),
 };
 
+const prepaymentFields = {
+  paymentType: PrepaymentTypeEnum.optional(),
+  paymentPercent: z.coerce.number().int().min(1).max(100).optional().nullable(),
+  paymentAmount: z.coerce.number().positive().optional().nullable(),
+};
+
+// Если paymentType = FIXED, paymentAmount обязателен и > 0.
+function prepaymentRefine<T extends {
+  paymentType?: "PERCENT" | "FIXED";
+  paymentAmount?: number | null;
+}>(d: T): boolean {
+  if (d.paymentType === "FIXED") {
+    return typeof d.paymentAmount === "number" && d.paymentAmount > 0;
+  }
+  return true;
+}
+
 // Либо все три секционных поля заданы вместе, либо все null.
 // sectionsBookingMax ≤ sectionsTotal.
 function sectionsRefine<T extends {
@@ -46,7 +64,7 @@ export const objectTypeCreateSchema = z
   .object({
     categoryId: z.string().min(1),
     name: z.string().min(1).max(100),
-    description: z.string().max(1000).optional().nullable(),
+    description: z.string().max(5000).optional().nullable(),
     checkInTime: HHMM.optional().nullable(),
     checkOutTime: HHMM.optional().nullable(),
     hourlyStepMinutes: z.coerce.number().int().min(15).max(240).optional().nullable(),
@@ -59,7 +77,8 @@ export const objectTypeCreateSchema = z
     maxCapacity: z.coerce.number().int().min(1),
     basePrice: z.coerce.number().nonnegative(),
     extraGuestPrice: z.coerce.number().nonnegative().default(0),
-    paymentPercent: z.coerce.number().int().min(1).max(100).optional().nullable(),
+    sortOrder: z.coerce.number().int().default(0),
+    ...prepaymentFields,
     ...sectionsFields,
   })
   .refine((d) => d.maxCapacity >= d.baseCapacity, {
@@ -70,12 +89,16 @@ export const objectTypeCreateSchema = z
     message:
       "sectionsTotal и sectionCapacity должны быть заданы вместе; sectionsBookingMax ≤ sectionsTotal",
     path: ["sectionsTotal"],
+  })
+  .refine(prepaymentRefine, {
+    message: "Для фиксированной предоплаты укажите сумму больше 0",
+    path: ["paymentAmount"],
   });
 
 export const objectTypeUpdateSchema = z
   .object({
     name: z.string().min(1).max(100).optional(),
-    description: z.string().max(1000).optional().nullable(),
+    description: z.string().max(5000).optional().nullable(),
     checkInTime: HHMM.optional().nullable(),
     checkOutTime: HHMM.optional().nullable(),
     hourlyStepMinutes: z.coerce.number().int().min(15).max(240).optional().nullable(),
@@ -88,20 +111,25 @@ export const objectTypeUpdateSchema = z
     maxCapacity: z.coerce.number().int().min(1).optional(),
     basePrice: z.coerce.number().nonnegative().optional(),
     extraGuestPrice: z.coerce.number().nonnegative().optional(),
-    paymentPercent: z.coerce.number().int().min(1).max(100).optional().nullable(),
+    sortOrder: z.coerce.number().int().optional(),
+    ...prepaymentFields,
     ...sectionsFields,
   })
   .refine(sectionsRefine, {
     message:
       "sectionsTotal и sectionCapacity должны быть заданы вместе; sectionsBookingMax ≤ sectionsTotal",
     path: ["sectionsTotal"],
+  })
+  .refine(prepaymentRefine, {
+    message: "Для фиксированной предоплаты укажите сумму больше 0",
+    path: ["paymentAmount"],
   });
 
 export const objectCreateSchema = z.object({
   objectTypeId: z.string().min(1),
   name: z.string().min(1).max(100),
   slug: z.string().regex(/^[a-z0-9-]+$/).min(1).max(60).optional(),
-  description: z.string().max(2000).optional().nullable(),
+  description: z.string().max(10000).optional().nullable(),
   status: ObjectStatusEnum.default("ACTIVE"),
   sortOrder: z.coerce.number().int().default(0),
 });

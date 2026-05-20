@@ -33,6 +33,14 @@ enum BookingMode {
   FULL_DAY
 }
 
+// Способ расчёта предоплаты для типа объекта.
+// PERCENT — процент от итоговой суммы (paymentPercent / Settings).
+// FIXED   — фиксированная сумма (paymentAmount), но не больше суммы брони.
+enum PrepaymentType {
+  PERCENT
+  FIXED
+}
+
 // === Тип объекта ===
 model ObjectType {
   id                String          @id @default(cuid())
@@ -55,8 +63,14 @@ model ObjectType {
   maxCapacity       Int
   basePrice         Decimal         @db.Decimal(10, 2)
   extraGuestPrice   Decimal         @default(0) @db.Decimal(10, 2)
-  // % предоплаты для этого типа. null = использовать глобальный из Settings.paymentPercent
+  // Тип предоплаты. PERCENT — используется paymentPercent (или глобальный из Settings).
+  // FIXED — используется paymentAmount (фикс. сумма, не больше суммы брони).
+  paymentType       PrepaymentType  @default(PERCENT)
+  // % предоплаты для этого типа. null = использовать глобальный из Settings.paymentPercent.
+  // Применяется только когда paymentType = PERCENT.
   paymentPercent    Int?
+  // Фиксированная сумма предоплаты. Применяется только когда paymentType = FIXED.
+  paymentAmount     Decimal?        @db.Decimal(10, 2)
   // Секционная бронь (банкетные площадки): null → секционная логика отключена,
   // объекты типа бронируются 1:1 как обычно. Если задано — клиент бронирует
   // ceil(guests/sectionCapacity) секций; больше sectionsBookingMax → вся площадка.
@@ -65,13 +79,14 @@ model ObjectType {
   sectionsBookingMax Int?
   // Цена за всю площадку (override). null → fallback = basePrice * sectionsTotal.
   fullVenuePrice     Decimal?        @db.Decimal(10, 2)
+  sortOrder         Int             @default(0)
   objects           BookingObject[]
   slots             ObjectTypeSlot[]
   media             ObjectTypeMedia[]
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
 
-  @@index([categoryId])
+  @@index([categoryId, sortOrder])
 }
 
 // === Медиа на уровне типа объекта ===
@@ -179,6 +194,7 @@ model Booking {
   // оплачивается на месте.
   prepaymentAmount Decimal          @default(0) @db.Decimal(10, 2)
   paymentPercent  Int               @default(100)
+  paymentType     PrepaymentType    @default(PERCENT)
   // Для секционных типов (банкетные площадки) — сколько секций занимает бронь.
   // null → бронь занимает объект целиком (не-секционный тип или legacy).
   sectionsBooked  Int?

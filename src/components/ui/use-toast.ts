@@ -37,6 +37,10 @@ export function toast(props: { title?: string; description?: string; variant?: "
   return { id };
 }
 
+export function dismissToast(id: string) {
+  dispatch({ type: "REMOVE", id });
+}
+
 export function useToast() {
   const [state, setState] = React.useState<State>(memoryState);
   React.useEffect(() => {

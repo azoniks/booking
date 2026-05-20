@@ -15,6 +15,7 @@ export default async function HomePage({
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
       include: {
         objectTypes: {
+          orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
           include: {
             media: { orderBy: [{ isMain: "desc" }, { sortOrder: "asc" }] },
             slots: { select: { id: true } },

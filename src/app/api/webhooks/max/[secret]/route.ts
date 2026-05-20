@@ -69,7 +69,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sec
     const prepay = Number(booking.prepaymentAmount);
     const remaining = Math.max(0, total - prepay);
     const priceLines =
-      booking.paymentPercent < 100 && remaining > 0
+      remaining > 0 && prepay > 0
         ? [
             `Полная стоимость: ${total} ₽`,
             `Оплачено онлайн: ${prepay} ₽`,

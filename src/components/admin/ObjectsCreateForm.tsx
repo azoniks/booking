@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "@/components/ui/use-toast";
+import { RichTextEditor } from "./RichTextEditor";
 
 export function ObjectsCreateForm({
   types,
@@ -77,13 +78,14 @@ export function ObjectsCreateForm({
             <Label>Slug (опц.)</Label>
             <Input name="slug" placeholder="auto" />
           </div>
-          <div className="md:col-span-2">
-            <Label>Описание</Label>
-            <Input name="description" />
-          </div>
           <div>
             <Label>Порядок</Label>
             <Input name="sortOrder" type="number" defaultValue={0} />
+          </div>
+          <div></div>
+          <div className="md:col-span-3">
+            <Label>Описание</Label>
+            <RichTextEditor name="description" maxLength={10000} />
           </div>
           <div className="md:col-span-3 flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>Отмена</Button>

@@ -133,7 +133,10 @@ export default async function BookingPage({ params }: { params: Promise<{ object
               </CardHeader>
               <CardContent className="space-y-4">
                 {obj.description && (
-                  <p className="leading-relaxed whitespace-pre-line">{obj.description}</p>
+                  <div
+                    className="text-sm leading-relaxed [&_p]:my-2 [&_h2]:text-xl [&_h2]:font-semibold [&_h2]:mt-3 [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:mt-3 [&_h4]:font-semibold [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_a]:text-primary [&_a]:underline [&_strong]:font-semibold"
+                    dangerouslySetInnerHTML={{ __html: obj.description }}
+                  />
                 )}
                 <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
                   {facts.map((f, i) => (

@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 export default async function ObjectTypesPage() {
   const [types, categories] = await Promise.all([
     prisma.objectType.findMany({
-      orderBy: { name: "asc" },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
       include: {
         category: true,
         _count: { select: { objects: true } },
@@ -43,7 +43,10 @@ export default async function ObjectTypesPage() {
           maxCapacity: t.maxCapacity,
           basePrice: t.basePrice.toString(),
           extraGuestPrice: t.extraGuestPrice.toString(),
+          paymentType: t.paymentType,
           paymentPercent: t.paymentPercent,
+          paymentAmount: t.paymentAmount ? t.paymentAmount.toString() : null,
+          sortOrder: t.sortOrder,
           sectionsTotal: t.sectionsTotal,
           sectionCapacity: t.sectionCapacity,
           sectionsBookingMax: t.sectionsBookingMax,

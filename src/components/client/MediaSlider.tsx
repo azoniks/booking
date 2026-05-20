@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
-import { ChevronLeft, ChevronRight, ImageOff } from "lucide-react";
+import * as DialogPrimitive from "@radix-ui/react-dialog";
+import { ChevronLeft, ChevronRight, ImageOff, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type MediaItem = {
@@ -20,6 +21,7 @@ export function MediaSlider({
   aspect?: string;
 }) {
   const [index, setIndex] = useState(0);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
   const trackRef = useRef<HTMLDivElement>(null);
   const total = items.length;
 
@@ -35,8 +37,9 @@ export function MediaSlider({
   // Стрелки клавиатуры
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (!trackRef.current) return;
-      const inside = trackRef.current.contains(document.activeElement);
+      const inside =
+        lightboxOpen ||
+        (trackRef.current?.contains(document.activeElement) ?? false);
       if (!inside) return;
       if (e.key === "ArrowLeft") {
         e.preventDefault();
@@ -48,7 +51,7 @@ export function MediaSlider({
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [go, index]);
+  }, [go, index, lightboxOpen]);
 
   // Свайп
   const touchStartX = useRef<number | null>(null);
@@ -99,8 +102,9 @@ export function MediaSlider({
           key={cur.id}
           src={cur.url}
           alt={alt}
-          className="w-full h-full object-cover"
+          className="w-full h-full object-cover cursor-zoom-in"
           loading="lazy"
+          onClick={() => setLightboxOpen(true)}
         />
       )}
 
@@ -146,6 +150,76 @@ export function MediaSlider({
           </div>
         </>
       )}
+
+      <DialogPrimitive.Root open={lightboxOpen} onOpenChange={setLightboxOpen}>
+        <DialogPrimitive.Portal>
+          <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/90 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+          <DialogPrimitive.Content
+            className="fixed inset-0 z-50 flex items-center justify-center focus:outline-none"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setLightboxOpen(false);
+            }}
+          >
+            <DialogPrimitive.Title className="sr-only">
+              Просмотр изображения {index + 1} из {total}
+            </DialogPrimitive.Title>
+
+            {cur.type === "VIDEO" ? (
+              <video
+                src={cur.url}
+                className="max-w-[95vw] max-h-[95vh]"
+                controls
+                autoPlay
+                playsInline
+              />
+            ) : (
+              <img
+                src={cur.url}
+                alt={alt}
+                className="max-w-[95vw] max-h-[95vh] object-contain select-none"
+                onClick={(e) => e.stopPropagation()}
+              />
+            )}
+
+            <DialogPrimitive.Close
+              className="absolute top-4 right-4 rounded-full bg-black/60 hover:bg-black/80 text-white p-2 focus:outline-none focus:ring-2 focus:ring-white"
+              aria-label="Закрыть"
+            >
+              <X className="w-5 h-5" />
+            </DialogPrimitive.Close>
+
+            {total > 1 && (
+              <>
+                <button
+                  type="button"
+                  aria-label="Предыдущее"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    go(index - 1);
+                  }}
+                  className="absolute left-4 top-1/2 -translate-y-1/2 rounded-full bg-black/60 hover:bg-black/80 text-white p-2.5 focus:outline-none focus:ring-2 focus:ring-white"
+                >
+                  <ChevronLeft className="w-6 h-6" />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Следующее"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    go(index + 1);
+                  }}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full bg-black/60 hover:bg-black/80 text-white p-2.5 focus:outline-none focus:ring-2 focus:ring-white"
+                >
+                  <ChevronRight className="w-6 h-6" />
+                </button>
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-sm px-3 py-1 rounded-full bg-black/60 text-white">
+                  {index + 1} / {total}
+                </div>
+              </>
+            )}
+          </DialogPrimitive.Content>
+        </DialogPrimitive.Portal>
+      </DialogPrimitive.Root>
     </div>
   );
 }

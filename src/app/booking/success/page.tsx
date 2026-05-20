@@ -36,8 +36,12 @@ export default async function SuccessPage({
               const total = Number(b.totalPrice);
               const prepay = Number(b.prepaymentAmount);
               const remaining = Math.max(0, total - prepay);
-              const split = b.paymentPercent < 100 && remaining > 0;
+              const split = remaining > 0 && prepay > 0 && prepay < total;
               const fmt = (n: number) => n.toLocaleString("ru-RU");
+              const prepayLabel =
+                b.paymentType === "FIXED"
+                  ? "Оплачено онлайн (фикс. предоплата)"
+                  : `Оплачено онлайн (предоплата ${b.paymentPercent}%)`;
               return (
                 <div className="space-y-2 text-sm">
                   <div>Код брони: <span className="font-mono font-bold">{b.publicCode}</span></div>
@@ -51,9 +55,7 @@ export default async function SuccessPage({
                         <span>{fmt(total)} ₽</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">
-                          Оплачено онлайн (предоплата {b.paymentPercent}%)
-                        </span>
+                        <span className="text-muted-foreground">{prepayLabel}</span>
                         <span className="font-medium text-emerald-700">{fmt(prepay)} ₽</span>
                       </div>
                       <div className="flex justify-between border-t pt-1">

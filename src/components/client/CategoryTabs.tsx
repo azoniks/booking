@@ -196,7 +196,10 @@ function TypeSection({
           <div>
             <h3 className="text-2xl sm:text-3xl font-bold tracking-tight">{t.name}</h3>
             {t.description && (
-              <p className="text-muted-foreground mt-2 leading-relaxed">{t.description}</p>
+              <div
+                className="text-muted-foreground mt-2 leading-relaxed [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_a]:text-primary [&_a]:underline [&_strong]:text-foreground"
+                dangerouslySetInnerHTML={{ __html: t.description }}
+              />
             )}
           </div>
 

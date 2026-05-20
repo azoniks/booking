@@ -34,9 +34,16 @@ export async function GET(req: NextRequest) {
     const t = obj.objectType;
     const cleaningMs = t.cleaningMinutes * 60_000;
 
-    // Эффективный % предоплаты: override типа > глобальный из Settings > 100%.
+    // Эффективные параметры предоплаты для фронта. FIXED — отдаём сумму;
+    // фронт сам кламует её по итоговой стоимости. PERCENT — override типа >
+    // глобальный из Settings > 100%.
     let paymentPercent = 100;
-    if (t.paymentPercent && t.paymentPercent > 0) {
+    let paymentAmount: number | null = null;
+    const paymentType: "PERCENT" | "FIXED" =
+      t.paymentType === "FIXED" && t.paymentAmount ? "FIXED" : "PERCENT";
+    if (paymentType === "FIXED") {
+      paymentAmount = Number(t.paymentAmount);
+    } else if (t.paymentPercent && t.paymentPercent > 0) {
       paymentPercent = Math.min(100, Math.max(1, t.paymentPercent));
     } else {
       const s = await prisma.settings.findUnique({ where: { key: "paymentPercent" } });
@@ -136,6 +143,8 @@ export async function GET(req: NextRequest) {
       basePrice: Number(t.basePrice),
       extraGuestPrice: Number(t.extraGuestPrice),
       paymentPercent,
+      paymentType,
+      paymentAmount,
       sections: sectionsConfig,
       daysOccupancy: sectionsConfig ? daysOccupancy : [],
       slots: t.slots.map((s) => ({

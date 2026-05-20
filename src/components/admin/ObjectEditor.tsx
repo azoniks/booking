@@ -6,12 +6,12 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Star, Trash2, Upload } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { useFormDirty } from "./_hooks";
+import { RichTextEditor } from "./RichTextEditor";
 
 type Media = {
   id: string;
@@ -162,10 +162,6 @@ export function ObjectEditor({
                 ))}
               </select>
             </div>
-            <div className="md:col-span-3">
-              <Label>Описание</Label>
-              <Textarea name="description" defaultValue={obj.description ?? ""} rows={4} />
-            </div>
             <div>
               <Label>Статус</Label>
               <select
@@ -182,6 +178,17 @@ export function ObjectEditor({
             <div>
               <Label>Порядок</Label>
               <Input name="sortOrder" type="number" defaultValue={obj.sortOrder} />
+            </div>
+            <div></div>
+            <div className="md:col-span-3">
+              <Label>Описание</Label>
+              <RichTextEditor
+                name="description"
+                defaultValue={obj.description ?? ""}
+                placeholder="Опишите особенности объекта"
+                maxLength={10000}
+                onChange={formProps.onChange}
+              />
             </div>
             <div className="md:col-span-3 flex justify-end">
               <Button type="submit" disabled={!dirty}>Сохранить</Button>

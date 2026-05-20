@@ -4,7 +4,7 @@ import { calcPrice } from "./pricing";
 import { generatePublicCode } from "./utils";
 import { localDateTimeToUtc } from "./time";
 import { env } from "./env";
-import { Prisma } from "@prisma/client";
+import { Prisma, PrepaymentType } from "@prisma/client";
 
 export class BookingConflictError extends Error {
   constructor() {
@@ -187,12 +187,17 @@ export async function createBooking(args: CreateBookingArgs) {
 
   const blockedUntil = new Date(endAt.getTime() + t.cleaningMinutes * 60_000);
 
-  // Процент предоплаты: override типа > глобальный из Settings > 100%.
-  const paymentPercent = await resolvePaymentPercent(t.paymentPercent);
-  const prepaymentAmount = pricing.totalPrice
-    .mul(paymentPercent)
-    .div(100)
-    .toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
+  // Предоплата: либо процент (override типа > глобальный > 100%),
+  // либо фиксированная сумма (кламп по totalPrice).
+  const prepay = await resolvePrepayment(
+    {
+      paymentType: t.paymentType,
+      paymentPercent: t.paymentPercent,
+      paymentAmount: t.paymentAmount,
+    },
+    pricing.totalPrice,
+  );
+  const { prepaymentAmount, paymentPercent, paymentType } = prepay;
 
   // Транзакция Serializable: повторно проверяем пересечения внутри
   // и создаём бронь атомарно.
@@ -244,6 +249,7 @@ export async function createBooking(args: CreateBookingArgs) {
           totalPrice: pricing.totalPrice,
           paymentPercent,
           prepaymentAmount,
+          paymentType,
           sectionsBooked: sectionsNeeded,
           status: "PENDING",
         },
@@ -273,6 +279,46 @@ export async function resolvePaymentPercent(typeOverride: number | null): Promis
 
 function clampPercent(v: number): number {
   return Math.max(1, Math.min(100, Math.round(v)));
+}
+
+/**
+ * Считает предоплату для брони по настройкам типа объекта.
+ * Возвращает сумму, тип (PERCENT/FIXED) и эффективный % (для отображения).
+ *
+ * FIXED: сумма = min(paymentAmount, totalPrice). paymentPercent — производный
+ * от amount/total, чтобы существующая логика «split view» (paymentPercent<100)
+ * продолжала работать.
+ * PERCENT: процент из типа > глобальный из Settings > 100%.
+ */
+export async function resolvePrepayment(
+  type: {
+    paymentType: PrepaymentType;
+    paymentPercent: number | null;
+    paymentAmount: Prisma.Decimal | null;
+  },
+  totalPrice: Prisma.Decimal,
+): Promise<{
+  prepaymentAmount: Prisma.Decimal;
+  paymentPercent: number;
+  paymentType: PrepaymentType;
+}> {
+  if (type.paymentType === "FIXED" && type.paymentAmount) {
+    const fixed = new Prisma.Decimal(type.paymentAmount);
+    const amount = fixed.gt(totalPrice) ? totalPrice : fixed;
+    const prepaymentAmount = amount.toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
+    const percent = totalPrice.gt(0)
+      ? clampPercent(
+          prepaymentAmount.mul(100).div(totalPrice).toNumber(),
+        )
+      : 100;
+    return { prepaymentAmount, paymentPercent: percent, paymentType: "FIXED" };
+  }
+  const percent = await resolvePaymentPercent(type.paymentPercent);
+  const prepaymentAmount = totalPrice
+    .mul(percent)
+    .div(100)
+    .toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
+  return { prepaymentAmount, paymentPercent: percent, paymentType: "PERCENT" };
 }
 
 /**

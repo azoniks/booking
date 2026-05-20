@@ -170,11 +170,15 @@ export async function sendNewBookingNotifications(bookingId: string) {
   const total = Number(b.totalPrice);
   const prepay = Number(b.prepaymentAmount);
   const remaining = Math.max(0, total - prepay);
+  const prepayLabel =
+    b.paymentType === "FIXED"
+      ? "Предоплата онлайн (фикс. сумма)"
+      : `Предоплата онлайн (${b.paymentPercent}%)`;
   const priceLines =
-    b.paymentPercent < 100 && remaining > 0
+    remaining > 0 && prepay > 0
       ? [
           `Полная стоимость: ${total} ₽`,
-          `Предоплата онлайн (${b.paymentPercent}%): ${prepay} ₽`,
+          `${prepayLabel}: ${prepay} ₽`,
           `Остаток при заселении: ${remaining.toFixed(2)} ₽`,
         ]
       : [`Сумма: ${total} ₽`];
@@ -221,9 +225,13 @@ export async function sendPaidNotifications(bookingId: string) {
     `Гостей: ${b.guestsCount}`,
     `Полная стоимость: ${b.totalPrice} ₽`,
   ];
-  if (b.paymentPercent < 100 && remaining > 0) {
+  if (remaining > 0 && Number(b.prepaymentAmount) > 0) {
+    const paidLabel =
+      b.paymentType === "FIXED"
+        ? "Оплачено онлайн (фикс. предоплата)"
+        : `Оплачено онлайн (предоплата ${b.paymentPercent}%)`;
     guestLines.push(
-      `Оплачено онлайн (предоплата ${b.paymentPercent}%): ${b.prepaymentAmount} ₽`,
+      `${paidLabel}: ${b.prepaymentAmount} ₽`,
       `Остаток к оплате на месте: ${remaining.toFixed(2)} ₽`,
     );
   } else {

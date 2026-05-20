@@ -159,6 +159,8 @@ export function BookingForm({ object }: { object: ObjectInfo }) {
   const [busy, setBusy] = useState<BusyInterval[]>([]);
   const [daysOccupancy, setDaysOccupancy] = useState<DayOccupancy[]>([]);
   const [paymentPercent, setPaymentPercent] = useState(100);
+  const [paymentType, setPaymentType] = useState<"PERCENT" | "FIXED">("PERCENT");
+  const [paymentAmount, setPaymentAmount] = useState<number | null>(null);
   const [loadingBusy, setLoadingBusy] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -181,6 +183,10 @@ export function BookingForm({ object }: { object: ObjectInfo }) {
           setSlots(j.data.slots ?? []);
           setDaysOccupancy(j.data.daysOccupancy ?? []);
           setPaymentPercent(Number(j.data.paymentPercent ?? 100));
+          setPaymentType(j.data.paymentType === "FIXED" ? "FIXED" : "PERCENT");
+          setPaymentAmount(
+            typeof j.data.paymentAmount === "number" ? j.data.paymentAmount : null,
+          );
         }
       } finally {
         if (!aborted) setLoadingBusy(false);
@@ -621,43 +627,66 @@ export function BookingForm({ object }: { object: ObjectInfo }) {
           {error && <p className="text-destructive text-sm">{error}</p>}
 
           <div className="border-t pt-4 space-y-2">
-            {paymentPercent < 100 && price > 0 ? (
-              <>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Полная стоимость</span>
-                  <span>{price.toLocaleString("ru-RU")} ₽</span>
-                </div>
-                <div className="flex items-center justify-between text-sm text-muted-foreground">
-                  <span>Остаток (на месте)</span>
-                  <span>
-                    {Math.round(price * (1 - paymentPercent / 100)).toLocaleString("ru-RU")} ₽
-                  </span>
-                </div>
-                <div className="flex items-center justify-between border-t pt-2">
-                  <div>
-                    <div className="text-xs text-muted-foreground">
-                      К оплате сейчас (предоплата {paymentPercent}%)
+            {(() => {
+              if (price <= 0) {
+                return (
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-xs text-muted-foreground">К оплате</div>
+                      <div className="text-2xl font-bold text-gold">0 ₽</div>
                     </div>
+                    <Button type="submit" disabled={submitting || !canSubmit}>
+                      {submitting ? "Создание…" : "Забронировать и оплатить"}
+                    </Button>
+                  </div>
+                );
+              }
+              const prepay =
+                paymentType === "FIXED" && paymentAmount !== null
+                  ? Math.min(paymentAmount, price)
+                  : Math.round((price * paymentPercent) / 100);
+              const remaining = Math.max(0, price - prepay);
+              const isSplit = remaining > 0;
+              const prepayLabel =
+                paymentType === "FIXED"
+                  ? "К оплате сейчас (фикс. предоплата)"
+                  : `К оплате сейчас (предоплата ${paymentPercent}%)`;
+              return isSplit ? (
+                <>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Полная стоимость</span>
+                    <span>{price.toLocaleString("ru-RU")} ₽</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm text-muted-foreground">
+                    <span>Остаток (на месте)</span>
+                    <span>{remaining.toLocaleString("ru-RU")} ₽</span>
+                  </div>
+                  <div className="flex items-center justify-between border-t pt-2">
+                    <div>
+                      <div className="text-xs text-muted-foreground">{prepayLabel}</div>
+                      <div className="text-2xl font-bold text-gold">
+                        {prepay.toLocaleString("ru-RU")} ₽
+                      </div>
+                    </div>
+                    <Button type="submit" disabled={submitting || !canSubmit}>
+                      {submitting ? "Создание…" : "Забронировать"}
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-xs text-muted-foreground">К оплате</div>
                     <div className="text-2xl font-bold text-gold">
-                      {Math.round((price * paymentPercent) / 100).toLocaleString("ru-RU")} ₽
+                      {price.toLocaleString("ru-RU")} ₽
                     </div>
                   </div>
                   <Button type="submit" disabled={submitting || !canSubmit}>
-                    {submitting ? "Создание…" : "Забронировать"}
+                    {submitting ? "Создание…" : "Забронировать и оплатить"}
                   </Button>
                 </div>
-              </>
-            ) : (
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-xs text-muted-foreground">К оплате</div>
-                  <div className="text-2xl font-bold text-gold">{price.toLocaleString("ru-RU")} ₽</div>
-                </div>
-                <Button type="submit" disabled={submitting || !canSubmit}>
-                  {submitting ? "Создание…" : "Забронировать и оплатить"}
-                </Button>
-              </div>
-            )}
+              );
+            })()}
           </div>
         </form>
       </CardContent>

@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { ok, handleError, requireAdmin, unauth } from "@/lib/api-utils";
 import { objectUpdateSchema } from "@/lib/validators";
+import { isEmptyRichText, sanitizeRichText } from "@/lib/sanitize";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!(await requireAdmin())) return unauth();
@@ -22,6 +23,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   try {
     const { id } = await params;
     const body = objectUpdateSchema.parse(await req.json());
+    if (typeof body.description === "string") {
+      body.description = isEmptyRichText(body.description)
+        ? null
+        : sanitizeRichText(body.description);
+    }
     const updated = await prisma.bookingObject.update({ where: { id }, data: body });
     return ok(updated);
   } catch (e) {
