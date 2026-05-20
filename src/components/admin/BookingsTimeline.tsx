@@ -72,18 +72,15 @@ export function BookingsTimeline() {
     bookings: BookingItem[];
     blocks: BlockItem[];
   } | null>(null);
-  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     let aborted = false;
-    setLoading(true);
     fetch(`/api/admin/timeline?from=${from}&to=${to}`)
       .then((r) => r.json())
       .then((j) => {
         if (aborted) return;
         if (j.ok) setData(j.data);
-      })
-      .finally(() => !aborted && setLoading(false));
+      });
     return () => {
       aborted = true;
     };
@@ -289,7 +286,6 @@ export function BookingsTimeline() {
             <Legend color="bg-emerald-500" label="оплачено" />
             <Legend color="bg-amber-400" label="ожидает оплаты" />
             <Legend color="bg-slate-400" label="блокировка" />
-            {loading && <span>загрузка…</span>}
           </div>
         </div>
       </CardHeader>
