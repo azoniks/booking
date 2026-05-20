@@ -8,7 +8,19 @@ const ALLOWED = {
   VIDEO: [".mp4", ".webm", ".mov"],
   PANO360: [".jpg", ".jpeg", ".png", ".webp"],
 };
-const MAX_SIZE = 25 * 1024 * 1024; // 25MB
+// Лимиты по типу. У картинок жёстко, у видео — широко, чтобы можно было
+// заливать обзорные ролики объектов без перекодирования.
+const MAX_SIZE: Record<MediaType, number> = {
+  IMAGE: 25 * 1024 * 1024, // 25 MB
+  PANO360: 50 * 1024 * 1024, // 50 MB
+  VIDEO: 200 * 1024 * 1024, // 200 MB
+};
+
+export const MAX_UPLOAD_MB: Record<MediaType, number> = {
+  IMAGE: MAX_SIZE.IMAGE / 1024 / 1024,
+  PANO360: MAX_SIZE.PANO360 / 1024 / 1024,
+  VIDEO: MAX_SIZE.VIDEO / 1024 / 1024,
+};
 
 export type MediaType = "IMAGE" | "VIDEO" | "PANO360";
 
@@ -20,8 +32,9 @@ export async function saveUpload(
   type: MediaType,
   kind: UploadKind = "object",
 ): Promise<{ url: string }> {
-  if (file.size > MAX_SIZE) {
-    throw new Error(`Файл больше ${MAX_SIZE / 1024 / 1024} МБ`);
+  const limit = MAX_SIZE[type];
+  if (file.size > limit) {
+    throw new Error(`Файл больше ${Math.round(limit / 1024 / 1024)} МБ`);
   }
   const ext = extname(file.name).toLowerCase();
   if (!ALLOWED[type].includes(ext)) {

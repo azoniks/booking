@@ -199,8 +199,13 @@ export function ObjectEditor({
 
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>Медиа</CardTitle>
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div>
+              <CardTitle>Медиа</CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">
+                Картинки до 25 МБ, видео до 200 МБ (mp4/webm/mov).
+              </p>
+            </div>
             <div className="flex gap-2 flex-wrap">
               <input
                 ref={fileInput}

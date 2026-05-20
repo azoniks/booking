@@ -591,11 +591,16 @@ function TypeMediaEditor({ typeId, initial }: { typeId: string; initial: TypeMed
   return (
     <div className="mt-4 pt-4 border-t">
       <div className="flex items-center justify-between mb-2">
-        <div className="text-sm font-semibold">
-          Медиа типа
-          <span className="text-xs text-muted-foreground font-normal ml-2">
-            (используются как fallback для объектов без собственных медиа)
-          </span>
+        <div>
+          <div className="text-sm font-semibold">
+            Медиа типа
+            <span className="text-xs text-muted-foreground font-normal ml-2">
+              (используются как fallback для объектов без собственных медиа)
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Картинки до 25 МБ, видео до 200 МБ (mp4/webm/mov).
+          </p>
         </div>
         <div>
           <input
