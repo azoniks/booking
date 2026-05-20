@@ -11,12 +11,17 @@ export const dynamic = "force-dynamic";
 export default async function BookingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string }>;
+  searchParams: Promise<{ status?: string; cat?: string }>;
 }) {
-  const { status } = await searchParams;
-  const [items, objects] = await Promise.all([
+  const { status, cat } = await searchParams;
+  const [items, objects, categories] = await Promise.all([
     prisma.booking.findMany({
-      where: status ? { status: status as never } : undefined,
+      where: {
+        ...(status ? { status: status as never } : {}),
+        ...(cat
+          ? { object: { objectType: { categoryId: cat } } }
+          : {}),
+      },
       orderBy: { createdAt: "desc" },
       take: 100,
       include: {
@@ -35,6 +40,9 @@ export default async function BookingsPage({
           },
         },
       },
+    }),
+    prisma.category.findMany({
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     }),
   ]);
 
@@ -56,7 +64,7 @@ export default async function BookingsPage({
     })),
   }));
 
-  const tabs = [
+  const statusTabs = [
     { value: "", label: "Все" },
     { value: "PENDING", label: "Ожидают" },
     { value: "PAID", label: "Оплачены" },
@@ -64,27 +72,67 @@ export default async function BookingsPage({
     { value: "COMPLETED", label: "Завершены" },
   ];
 
+  const buildHref = (next: { status?: string; cat?: string }) => {
+    const params = new URLSearchParams();
+    if (next.status) params.set("status", next.status);
+    if (next.cat) params.set("cat", next.cat);
+    const qs = params.toString();
+    return qs ? `/admin/bookings?${qs}` : "/admin/bookings";
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Брони</h1>
         <AdminBookingCreateForm objects={formObjects} />
       </div>
-      <div className="flex gap-2 flex-wrap">
-        {tabs.map((t) => (
-          <Link
-            key={t.value}
-            href={t.value ? `/admin/bookings?status=${t.value}` : "/admin/bookings"}
-            className={`px-3 py-1.5 rounded-md text-sm ${
-              (status || "") === t.value
-                ? "bg-primary text-primary-foreground"
-                : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
-            }`}
-          >
-            {t.label}
-          </Link>
-        ))}
+
+      <div className="space-y-2">
+        <div className="flex gap-2 flex-wrap">
+          {statusTabs.map((t) => (
+            <Link
+              key={t.value || "all"}
+              href={buildHref({ status: t.value || undefined, cat })}
+              className={`px-3 py-1.5 rounded-md text-sm ${
+                (status || "") === t.value
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+              }`}
+            >
+              {t.label}
+            </Link>
+          ))}
+        </div>
+
+        {categories.length > 0 && (
+          <div className="flex gap-2 flex-wrap">
+            <Link
+              href={buildHref({ status, cat: undefined })}
+              className={`px-3 py-1.5 rounded-md text-sm border ${
+                !cat
+                  ? "bg-primary/10 text-primary border-primary"
+                  : "bg-background text-muted-foreground hover:bg-slate-50 border-input"
+              }`}
+            >
+              Все категории
+            </Link>
+            {categories.map((c) => (
+              <Link
+                key={c.id}
+                href={buildHref({ status, cat: c.id })}
+                className={`px-3 py-1.5 rounded-md text-sm border ${
+                  cat === c.id
+                    ? "bg-primary/10 text-primary border-primary"
+                    : "bg-background text-muted-foreground hover:bg-slate-50 border-input"
+                }`}
+              >
+                {c.name}
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
+
       <div className="grid gap-2">
         {items.map((b) => (
           <Link key={b.id} href={`/admin/bookings/${b.id}`}>
@@ -94,6 +142,7 @@ export default async function BookingsPage({
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-mono text-xs text-muted-foreground">{b.publicCode}</span>
                     <span className="font-medium">{b.object.name}</span>
+                    <Badge variant="outline">{b.object.objectType.category.name}</Badge>
                     <StatusBadge status={b.status} />
                   </div>
                   <div className="text-sm text-muted-foreground">

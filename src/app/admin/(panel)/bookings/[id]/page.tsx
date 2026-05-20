@@ -28,11 +28,7 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
       </Link>
       <div className="flex items-center gap-3 flex-wrap">
         <h1 className="text-2xl font-bold">Бронь {b.publicCode}</h1>
-        <Badge variant={
-          b.status === "PAID" ? "success" :
-          b.status === "PENDING" ? "warning" :
-          b.status === "CANCELLED" ? "destructive" : "secondary"
-        }>{b.status}</Badge>
+        <StatusBadge status={b.status} />
       </div>
 
       <Card>
@@ -119,4 +115,16 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
       )}
     </div>
   );
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const map: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" | "success" | "warning" }> = {
+    PENDING: { label: "Ожидает", variant: "warning" },
+    PAID: { label: "Оплачено", variant: "success" },
+    CANCELLED: { label: "Отменено", variant: "destructive" },
+    COMPLETED: { label: "Завершено", variant: "outline" },
+    NO_SHOW: { label: "Не пришёл", variant: "destructive" },
+  };
+  const cfg = map[status] || { label: status, variant: "secondary" as const };
+  return <Badge variant={cfg.variant}>{cfg.label}</Badge>;
 }
