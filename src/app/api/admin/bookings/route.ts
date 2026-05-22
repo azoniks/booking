@@ -49,7 +49,6 @@ export async function POST(req: NextRequest) {
       guestName: data.guestName,
       guestEmail: data.guestEmail || "",
       guestPhone: data.guestPhone,
-      guestPhone2: data.guestPhone2,
       guestComment: data.guestComment,
     });
     if (data.markAsPaid) {
