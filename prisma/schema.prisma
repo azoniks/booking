@@ -180,6 +180,8 @@ model Booking {
   guestName       String
   guestEmail      String
   guestPhone      String
+  // Дополнительный телефон (например, второй контакт клиента). Необязательный.
+  guestPhone2     String?
   guestComment    String?
   startAt         DateTime
   endAt           DateTime

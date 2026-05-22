@@ -64,6 +64,7 @@ export function AdminBookingCreateForm({ objects }: { objects: FormObject[] }) {
       guestName: String(fd.get("guestName") || "").trim(),
       guestEmail: String(fd.get("guestEmail") || "").trim(),
       guestPhone: String(fd.get("guestPhone") || "").trim(),
+      guestPhone2: String(fd.get("guestPhone2") || "").trim() || undefined,
       guestComment: String(fd.get("guestComment") || "").trim() || undefined,
       markAsPaid: fd.get("markAsPaid") === "on",
     };
@@ -282,6 +283,10 @@ export function AdminBookingCreateForm({ objects }: { objects: FormObject[] }) {
               <div>
                 <Label>Телефон</Label>
                 <Input name="guestPhone" required placeholder="+7..." />
+              </div>
+              <div>
+                <Label>Доп. телефон (опц.)</Label>
+                <Input name="guestPhone2" placeholder="+7..." maxLength={30} />
               </div>
               <div>
                 <Label>Email (опц.)</Label>

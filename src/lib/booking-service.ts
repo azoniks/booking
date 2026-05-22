@@ -37,6 +37,7 @@ export interface CreateBookingArgs {
   guestName: string;
   guestEmail: string;
   guestPhone: string;
+  guestPhone2?: string | null;
   guestComment?: string;
 }
 
@@ -238,6 +239,7 @@ export async function createBooking(args: CreateBookingArgs) {
           guestName: args.guestName.trim(),
           guestEmail: args.guestEmail.trim().toLowerCase(),
           guestPhone: args.guestPhone.trim(),
+          guestPhone2: args.guestPhone2?.trim() || null,
           guestComment: args.guestComment?.trim() || null,
           startAt,
           endAt,

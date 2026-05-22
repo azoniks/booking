@@ -154,6 +154,7 @@ export function BookingForm({ object }: { object: ObjectInfo }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [phone2, setPhone2] = useState("");
   const [comment, setComment] = useState("");
 
   const [busy, setBusy] = useState<BusyInterval[]>([]);
@@ -352,6 +353,7 @@ export function BookingForm({ object }: { object: ObjectInfo }) {
         guestName: name,
         guestEmail: email,
         guestPhone: phone,
+        guestPhone2: phone2.trim() || undefined,
         guestComment: comment,
       };
       if (isFullDay) {
@@ -617,6 +619,16 @@ export function BookingForm({ object }: { object: ObjectInfo }) {
                   placeholder="+7…"
                 />
               </div>
+            </div>
+            <div>
+              <Label>Доп. телефон (опционально)</Label>
+              <Input
+                type="tel"
+                value={phone2}
+                onChange={(e) => setPhone2(e.target.value)}
+                placeholder="+7… (второй контакт)"
+                maxLength={30}
+              />
             </div>
             <div>
               <Label>Комментарий (опционально)</Label>

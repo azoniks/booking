@@ -37,6 +37,9 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
           <div><span className="text-muted-foreground">ФИО:</span> {b.guestName}</div>
           <div><span className="text-muted-foreground">Email:</span> {b.guestEmail}</div>
           <div><span className="text-muted-foreground">Телефон:</span> {b.guestPhone}</div>
+          {b.guestPhone2 && (
+            <div><span className="text-muted-foreground">Доп. телефон:</span> {b.guestPhone2}</div>
+          )}
           <div><span className="text-muted-foreground">Гостей:</span> {b.guestsCount}</div>
           {b.guestComment && (
             <div className="md:col-span-2">

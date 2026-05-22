@@ -185,7 +185,7 @@ export async function sendNewBookingNotifications(bookingId: string) {
   const text = [
     `Новая бронь ${b.publicCode}`,
     `Объект: ${b.object.name} (${b.object.objectType.category.name})`,
-    `Гость: ${b.guestName}, ${b.guestPhone}, ${b.guestEmail}`,
+    `Гость: ${b.guestName}, ${b.guestPhone}${b.guestPhone2 ? `, ${b.guestPhone2}` : ""}, ${b.guestEmail}`,
     `Гостей: ${b.guestsCount}`,
     `${formatLocal(b.startAt)} → ${formatLocal(b.endAt)}`,
     ...priceLines,

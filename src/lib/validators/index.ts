@@ -190,6 +190,7 @@ export const publicBookingSchema = z
     guestName: z.string().min(2).max(100),
     guestEmail: z.string().email(),
     guestPhone: z.string().min(5).max(30),
+    guestPhone2: z.string().max(30).optional().nullable(),
     guestComment: z.string().max(1000).optional(),
   });
 
@@ -208,6 +209,7 @@ export const adminBookingSchema = z.object({
   guestName: z.string().min(2).max(100),
   guestEmail: z.string().email().or(z.literal("")).optional(),
   guestPhone: z.string().min(1).max(30),
+  guestPhone2: z.string().max(30).optional().nullable(),
   guestComment: z.string().max(1000).optional(),
   markAsPaid: z.boolean().optional().default(true),
 });
