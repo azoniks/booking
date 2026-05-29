@@ -148,7 +148,6 @@ export default async function HomePage({
 
       <footer className="border-t py-6 bg-white">
         <div className="container text-center text-sm text-muted-foreground">
-          {siteContact && <div>{siteContact}</div>}
           <div>© {new Date().getFullYear()} {siteName}</div>
         </div>
       </footer>
