@@ -10,6 +10,7 @@ import {
   BookingDeleteButton,
   BookingRefundButton,
 } from "@/components/admin/BookingActions";
+import { BookingNotificationsTable } from "@/components/admin/BookingNotificationsTable";
 
 export const dynamic = "force-dynamic";
 
@@ -113,18 +114,16 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
 
       {b.notifications.length > 0 && (
         <Card>
-          <CardHeader><CardTitle>Уведомления</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle>
+              Уведомления{" "}
+              <span className="text-sm font-normal text-muted-foreground">
+                ({b.notifications.length})
+              </span>
+            </CardTitle>
+          </CardHeader>
           <CardContent>
-            <ul className="text-sm space-y-1">
-              {b.notifications.map((n) => (
-                <li key={n.id} className="flex justify-between gap-2">
-                  <span>
-                    {n.channel} → {n.recipient} ({n.kind})
-                  </span>
-                  <span className="text-muted-foreground">{formatLocal(n.sentAt)}</span>
-                </li>
-              ))}
-            </ul>
+            <BookingNotificationsTable notifications={b.notifications} />
           </CardContent>
         </Card>
       )}
