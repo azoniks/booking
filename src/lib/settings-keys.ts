@@ -13,6 +13,8 @@ export const SECRET_KEYS = new Set<string>([
   "maxBotToken",
   // SMTP
   "smtpPassword",
+  // Yandex SmartCaptcha
+  "yandexCaptchaServerKey",
 ]);
 
 export const MASK = "***";

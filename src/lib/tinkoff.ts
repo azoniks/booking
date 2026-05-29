@@ -203,9 +203,10 @@ export async function initPayment(bookingId: string): Promise<{
 
   const cfg = await getTinkoffConfig();
 
-  // Mock-режим
+  // Mock-режим: относительный URL — чтобы редирект работал
+  // на любом порту dev-сервера, независимо от env.APP_URL.
   if (cfg.mode === "mock") {
-    const url = `${env.APP_URL}/payments/mock?bookingId=${bookingId}&sig=${mockSign(bookingId)}`;
+    const url = `/payments/mock?bookingId=${bookingId}&sig=${mockSign(bookingId)}`;
     const payment = await prisma.payment.upsert({
       where: { bookingId },
       create: {

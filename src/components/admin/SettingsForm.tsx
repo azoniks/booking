@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,6 +33,19 @@ export function SettingsForm({ initial }: { initial: Initial }) {
       adminNotifyEmails: String(fd.get("adminNotifyEmails") || "")
         .split(",").map((s) => s.trim()).filter(Boolean),
       paymentPercent: Math.max(1, Math.min(100, Number(fd.get("paymentPercent") || 100))),
+      bookingRateLimitMax: Math.max(1, Math.floor(Number(fd.get("bookingRateLimitMax") || 5))),
+      bookingRateLimitWindowMin: Math.max(
+        1,
+        Math.floor(Number(fd.get("bookingRateLimitWindowMin") || 60)),
+      ),
+
+      yandexCaptchaEnabled: fd.get("yandexCaptchaEnabled") === "on" ? "true" : "false",
+      yandexCaptchaClientKey: String(fd.get("yandexCaptchaClientKey") || "").trim(),
+      yandexCaptchaServerKey: String(fd.get("yandexCaptchaServerKey") || ""),
+      yandexCaptchaSoftThreshold: Math.max(
+        1,
+        Math.floor(Number(fd.get("yandexCaptchaSoftThreshold") || 3)),
+      ),
 
       tinkoffMode: String(fd.get("tinkoffMode") || "mock"),
       tinkoffApiUrl: String(fd.get("tinkoffApiUrl") || ""),
@@ -159,6 +172,41 @@ export function SettingsForm({ initial }: { initial: Initial }) {
               </div>
             </CardContent>
           </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Антиспам бронирований</CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <Label>Максимум попыток с одного IP</Label>
+                <Input
+                  name="bookingRateLimitMax"
+                  type="number"
+                  min={1}
+                  defaultValue={Number(initial.bookingRateLimitMax ?? 5)}
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Сколько бронирований разрешено с одного IP за окно времени.
+                </p>
+              </div>
+              <div>
+                <Label>Окно, минут</Label>
+                <Input
+                  name="bookingRateLimitWindowMin"
+                  type="number"
+                  min={1}
+                  defaultValue={Number(initial.bookingRateLimitWindowMin ?? 60)}
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  По умолчанию 5 попыток за 60 минут. После превышения — ответ 429 и
+                  сообщение пользователю «Повторите через…».
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <YandexCaptchaCard initial={initial} />
         </TabsContent>
 
         {/* ─── Вкладка: Эквайринг ─── */}
@@ -220,11 +268,8 @@ export function SettingsForm({ initial }: { initial: Initial }) {
             keyValue={tinkoffProdKey}
             pwdSet={tinkoffProdPwdSet}
           />
-          <p className="text-xs text-muted-foreground">
-            Webhook URL для Tinkoff:{" "}
-            <code>{`${typeof window !== "undefined" ? window.location.origin : ""}/api/payments/tinkoff/webhook`}</code>
-          </p>
-        </CardContent>
+          <TinkoffWebhookHint />
+          </CardContent>
       </Card>
         </TabsContent>
 
@@ -399,6 +444,95 @@ export function SettingsForm({ initial }: { initial: Initial }) {
         </Button>
       </div>
     </form>
+  );
+}
+
+function TinkoffWebhookHint() {
+  const [origin, setOrigin] = useState("");
+  useEffect(() => {
+    setOrigin(window.location.origin);
+  }, []);
+  return (
+    <p className="text-xs text-muted-foreground">
+      Webhook URL для Tinkoff:{" "}
+      <code>{`${origin}/api/payments/tinkoff/webhook`}</code>
+    </p>
+  );
+}
+
+function YandexCaptchaCard({ initial }: { initial: Record<string, unknown> }) {
+  const enabled = initial.yandexCaptchaEnabled === "true";
+  const serverKeySet = initial.yandexCaptchaServerKey === MASK;
+  const clientKey = String(initial.yandexCaptchaClientKey ?? "");
+  const ready = enabled && clientKey.trim() !== "" && serverKeySet;
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <CardTitle>Yandex SmartCaptcha</CardTitle>
+          {!enabled ? (
+            <Badge variant="secondary">выключена</Badge>
+          ) : ready ? (
+            <Badge variant="success" className="gap-1">
+              <CheckCircle2 className="w-3 h-3" /> активна
+            </Badge>
+          ) : (
+            <Badge variant="destructive" className="gap-1">
+              <AlertTriangle className="w-3 h-3" /> не настроена
+            </Badge>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            id="yandexCaptchaEnabled"
+            name="yandexCaptchaEnabled"
+            defaultChecked={enabled}
+          />
+          <Label htmlFor="yandexCaptchaEnabled">Включить капчу для формы бронирования</Label>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Капча включается только после превышения «soft-порога» бронирований с IP в пределах
+          того же окна, что у антиспама выше. Тип капчи — «невидимая»: обычные гости её не
+          увидят, подозрительным покажется челлендж.
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <Label className="text-xs">Client key (публичный)</Label>
+            <Input
+              name="yandexCaptchaClientKey"
+              defaultValue={clientKey}
+              placeholder="ysc1_..."
+              autoComplete="off"
+            />
+          </div>
+          <div>
+            <Label className="text-xs">Server key (секрет)</Label>
+            <Input
+              name="yandexCaptchaServerKey"
+              type="password"
+              placeholder={serverKeySet ? "уже задан — оставьте пустым, чтобы не менять" : "ysc2_..."}
+              autoComplete="off"
+            />
+          </div>
+          <div>
+            <Label className="text-xs">Порог: после скольких броней с IP требовать капчу</Label>
+            <Input
+              name="yandexCaptchaSoftThreshold"
+              type="number"
+              min={1}
+              defaultValue={Number(initial.yandexCaptchaSoftThreshold ?? 3)}
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              По умолчанию 3. Считается в том же скользящем окне, что у антиспама.
+            </p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -805,7 +939,7 @@ function LogoUploader({ currentUrl }: { currentUrl: string }) {
           <input
             ref={inputRef}
             type="file"
-            accept="image/png,image/jpeg,image/webp,image/avif,image/gif,image/svg+xml"
+            accept="image/png,image/jpeg,image/webp,image/avif,image/gif"
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0];

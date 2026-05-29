@@ -8,6 +8,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 
+function formatRetry(sec: number): string {
+  if (sec <= 0) return "несколько минут";
+  const m = Math.ceil(sec / 60);
+  if (m <= 1) return "минуту";
+  if (m < 5) return `${m} минуты`;
+  return `${m} минут`;
+}
+
 function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
@@ -25,11 +33,25 @@ function LoginForm() {
       password: fd.get("password"),
       redirect: false,
     });
-    setLoading(false);
     if (res?.error) {
+      try {
+        const r = await fetch("/api/auth/login-status", { cache: "no-store" });
+        const j = await r.json();
+        if (j.blocked) {
+          setError(
+            `Слишком много неудачных попыток. Повторите через ${formatRetry(j.retryAfterSec)}.`,
+          );
+          setLoading(false);
+          return;
+        }
+      } catch {
+        // ignore, fall through to generic message
+      }
       setError("Неверный email или пароль");
+      setLoading(false);
       return;
     }
+    setLoading(false);
     router.push(callbackUrl);
     router.refresh();
   }

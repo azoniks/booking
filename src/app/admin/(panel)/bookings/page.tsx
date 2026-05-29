@@ -5,6 +5,10 @@ import { Badge } from "@/components/ui/badge";
 import { formatLocal } from "@/lib/time";
 import { formatRub } from "@/lib/utils";
 import { AdminBookingCreateForm } from "@/components/admin/AdminBookingCreateForm";
+import {
+  BookingRowDelete,
+  BookingsBulkDelete,
+} from "@/components/admin/BookingsListRowActions";
 
 export const dynamic = "force-dynamic";
 
@@ -82,9 +86,16 @@ export default async function BookingsPage({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <h1 className="text-2xl font-bold">Брони</h1>
-        <AdminBookingCreateForm objects={formObjects} />
+        <div className="flex items-center gap-2">
+          <BookingsBulkDelete
+            status={status}
+            cat={cat}
+            visibleCount={items.length}
+          />
+          <AdminBookingCreateForm objects={formObjects} />
+        </div>
       </div>
 
       <div className="space-y-2">
@@ -135,9 +146,12 @@ export default async function BookingsPage({
 
       <div className="grid gap-2">
         {items.map((b) => (
-          <Link key={b.id} href={`/admin/bookings/${b.id}`}>
-            <Card className="hover:bg-slate-50">
-              <CardContent className="p-3 flex flex-wrap items-center justify-between gap-2">
+          <Card key={b.id} className="hover:bg-slate-50">
+            <CardContent className="p-3 flex items-center gap-2">
+              <Link
+                href={`/admin/bookings/${b.id}`}
+                className="flex-1 min-w-0 flex flex-wrap items-center justify-between gap-2"
+              >
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-mono text-xs text-muted-foreground">{b.publicCode}</span>
@@ -153,9 +167,10 @@ export default async function BookingsPage({
                   <div>{formatLocal(b.startAt)} — {formatLocal(b.endAt)}</div>
                   <div className="font-semibold">{formatRub(b.totalPrice.toString())}</div>
                 </div>
-              </CardContent>
-            </Card>
-          </Link>
+              </Link>
+              <BookingRowDelete id={b.id} publicCode={b.publicCode} />
+            </CardContent>
+          </Card>
         ))}
         {items.length === 0 && (
           <p className="text-sm text-muted-foreground">Нет броней</p>

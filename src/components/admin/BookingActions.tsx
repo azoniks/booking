@@ -4,6 +4,31 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/use-toast";
 
+export function BookingDeleteButton({ id }: { id: string }) {
+  const router = useRouter();
+  async function deleteBooking() {
+    if (!confirm("Удалить бронь без возможности восстановления?")) return;
+    const res = await fetch(`/api/admin/bookings/${id}`, { method: "DELETE" });
+    const j = await res.json();
+    if (!j.ok) {
+      toast({
+        title: "Ошибка",
+        description: j.error || "Не удалось удалить",
+        variant: "destructive",
+      });
+      return;
+    }
+    toast({ title: "Бронь удалена" });
+    router.push("/admin/bookings");
+    router.refresh();
+  }
+  return (
+    <Button variant="destructive" onClick={deleteBooking}>
+      Удалить бронь
+    </Button>
+  );
+}
+
 export function BookingActions({ id, status }: { id: string; status: string }) {
   const router = useRouter();
   async function setStatus(s: string) {

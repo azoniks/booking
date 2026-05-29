@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatLocal } from "@/lib/time";
 import { formatRub } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import { BookingActions } from "@/components/admin/BookingActions";
+import { BookingActions, BookingDeleteButton } from "@/components/admin/BookingActions";
 
 export const dynamic = "force-dynamic";
 
@@ -91,8 +91,13 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
 
       <Card>
         <CardHeader><CardTitle>Действия</CardTitle></CardHeader>
-        <CardContent>
-          <BookingActions id={b.id} status={b.status} />
+        <CardContent className="flex flex-wrap items-center gap-3">
+          {b.status !== "COMPLETED" && (
+            <BookingActions id={b.id} status={b.status} />
+          )}
+          <div className="ml-auto">
+            <BookingDeleteButton id={b.id} />
+          </div>
         </CardContent>
       </Card>
 

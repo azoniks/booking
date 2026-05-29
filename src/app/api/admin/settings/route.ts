@@ -3,6 +3,8 @@ import { prisma } from "@/lib/db";
 import { ok, handleError, requireAdmin, unauth } from "@/lib/api-utils";
 import { settingsUpdateSchema } from "@/lib/validators";
 import { SECRET_KEYS, MASK, isMaskOrEmpty } from "@/lib/settings-keys";
+import { invalidateBookingRateLimitCache } from "@/lib/rate-limit";
+import { invalidateCaptchaConfigCache } from "@/lib/captcha";
 
 export async function GET() {
   if (!(await requireAdmin())) return unauth();
@@ -32,6 +34,8 @@ export async function PUT(req: NextRequest) {
       });
       updated++;
     }
+    invalidateBookingRateLimitCache();
+    invalidateCaptchaConfigCache();
     return ok({ updated });
   } catch (e) {
     return handleError(e);

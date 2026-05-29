@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import type { DateRange } from "react-day-picker";
 import { Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,27 @@ const timeFmt = new Intl.DateTimeFormat("ru-RU", {
   hour: "2-digit",
   minute: "2-digit",
 });
+
+function formatRuPhone(value: string): string {
+  let digits = value.replace(/\D/g, "");
+  if (digits.length === 0) return "";
+  if (digits.startsWith("8")) digits = "7" + digits.slice(1);
+  if (!digits.startsWith("7")) digits = "7" + digits;
+  digits = digits.slice(0, 11);
+
+  const p1 = digits.slice(1, 4);
+  const p2 = digits.slice(4, 7);
+  const p3 = digits.slice(7, 9);
+  const p4 = digits.slice(9, 11);
+
+  let out = "+7";
+  if (p1) out += ` (${p1}`;
+  if (p1.length === 3) out += ")";
+  if (p2) out += ` ${p2}`;
+  if (p3) out += `-${p3}`;
+  if (p4) out += `-${p4}`;
+  return out;
+}
 
 function plural(n: number, forms: [string, string, string]) {
   const n10 = Math.abs(n) % 10;
@@ -150,11 +171,21 @@ export function BookingForm({ object }: { object: ObjectInfo }) {
   // FULL_DAY: одна дата
   const [fullDayDate, setFullDayDate] = useState<Date | undefined>(undefined);
 
-  const [guests, setGuests] = useState(object.baseCapacity);
+  const [guestsInput, setGuestsInput] = useState(String(object.baseCapacity));
+  const guests = guestsInput === "" ? 0 : Number(guestsInput);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [comment, setComment] = useState("");
+
+  const [captcha, setCaptcha] = useState<{
+    enabled: boolean;
+    required: boolean;
+    siteKey: string;
+  }>({ enabled: false, required: false, siteKey: "" });
+  const captchaContainerRef = useRef<HTMLDivElement | null>(null);
+  const captchaWidgetIdRef = useRef<number | null>(null);
+  const captchaResolverRef = useRef<((token: string | null) => void) | null>(null);
 
   const [busy, setBusy] = useState<BusyInterval[]>([]);
   const [daysOccupancy, setDaysOccupancy] = useState<DayOccupancy[]>([]);
@@ -164,6 +195,114 @@ export function BookingForm({ object }: { object: ObjectInfo }) {
   const [loadingBusy, setLoadingBusy] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Статус капчи: нужна ли она для текущего IP
+  useEffect(() => {
+    let aborted = false;
+    fetch("/api/public/bookings/captcha-status")
+      .then((r) => r.json())
+      .then((j) => {
+        if (aborted || !j?.ok) return;
+        setCaptcha({
+          enabled: !!j.data.enabled,
+          required: !!j.data.required,
+          siteKey: String(j.data.siteKey || ""),
+        });
+      })
+      .catch(() => {});
+    return () => {
+      aborted = true;
+    };
+  }, []);
+
+  // Загрузка скрипта Yandex SmartCaptcha и рендер инвизибл-виджета, когда он нужен
+  useEffect(() => {
+    if (!captcha.required || !captcha.siteKey) return;
+    if (typeof window === "undefined") return;
+
+    type SmartCaptcha = {
+      render: (
+        container: HTMLElement,
+        opts: {
+          sitekey: string;
+          invisible?: boolean;
+          callback?: (token: string) => void;
+          "error-callback"?: () => void;
+        },
+      ) => number;
+      execute: (id: number) => void;
+      reset: (id: number) => void;
+    };
+    const w = window as unknown as { smartCaptcha?: SmartCaptcha };
+
+    function init() {
+      if (!w.smartCaptcha || !captchaContainerRef.current) return;
+      if (captchaWidgetIdRef.current !== null) return;
+      captchaWidgetIdRef.current = w.smartCaptcha.render(captchaContainerRef.current, {
+        sitekey: captcha.siteKey,
+        invisible: true,
+        callback: (token: string) => {
+          console.log("[captcha client] token received", token.slice(0, 16) + "…");
+          const resolve = captchaResolverRef.current;
+          captchaResolverRef.current = null;
+          resolve?.(token);
+        },
+        "error-callback": () => {
+          console.warn("[captcha client] error callback");
+          const resolve = captchaResolverRef.current;
+          captchaResolverRef.current = null;
+          resolve?.(null);
+        },
+      });
+      console.log("[captcha client] widget rendered id=", captchaWidgetIdRef.current);
+    }
+
+    if (w.smartCaptcha) {
+      init();
+      return;
+    }
+    const existing = document.querySelector<HTMLScriptElement>(
+      'script[data-yandex-captcha="1"]',
+    );
+    if (existing) {
+      existing.addEventListener("load", init, { once: true });
+      return;
+    }
+    const s = document.createElement("script");
+    s.src = "https://smartcaptcha.yandexcloud.net/captcha.js";
+    s.async = true;
+    s.dataset.yandexCaptcha = "1";
+    s.onload = init;
+    document.head.appendChild(s);
+  }, [captcha.required, captcha.siteKey]);
+
+  async function getCaptchaToken(): Promise<string | null> {
+    if (typeof window === "undefined") return null;
+    const w = window as unknown as {
+      smartCaptcha?: { execute: (id: number) => void; reset: (id: number) => void };
+    };
+    const id = captchaWidgetIdRef.current;
+    if (!w.smartCaptcha || id === null) {
+      console.warn("[captcha client] widget not ready, smartCaptcha=", !!w.smartCaptcha, "id=", id);
+      return null;
+    }
+    console.log("[captcha client] execute…");
+    return new Promise<string | null>((resolve) => {
+      captchaResolverRef.current = resolve;
+      try {
+        w.smartCaptcha!.reset(id);
+      } catch {
+        // первый запуск — reset может быть не нужен
+      }
+      w.smartCaptcha!.execute(id);
+      setTimeout(() => {
+        if (captchaResolverRef.current === resolve) {
+          captchaResolverRef.current = null;
+          resolve(null);
+        }
+      }, 30_000);
+    });
+  }
 
   // Загрузка занятости на 90 дней вперёд
   useEffect(() => {
@@ -378,14 +517,51 @@ export function BookingForm({ object }: { object: ObjectInfo }) {
           endAt: hourlySlots[endIdx!].date.toISOString(),
         };
       }
-      const res = await fetch("/api/public/bookings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const j = await res.json();
+
+      if (captcha.required) {
+        const token = await getCaptchaToken();
+        if (!token) {
+          setError("Не удалось пройти проверку. Попробуйте ещё раз.");
+          return;
+        }
+        body.captchaToken = token;
+      }
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30_000);
+      let res: Response;
+      try {
+        res = await fetch("/api/public/bookings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        });
+      } catch (err) {
+        const aborted =
+          err instanceof DOMException && err.name === "AbortError";
+        setError(
+          aborted
+            ? "Сервер не ответил за 30 секунд. Попробуйте ещё раз."
+            : "Не удалось отправить запрос. Проверьте соединение и попробуйте ещё раз.",
+        );
+        return;
+      } finally {
+        clearTimeout(timeoutId);
+      }
+
+      const j = await res.json().catch(() => ({ ok: false, error: "Некорректный ответ сервера" }));
       if (!j.ok) {
+        if (j.captchaRequired && j.siteKey) {
+          setCaptcha({ enabled: true, required: true, siteKey: String(j.siteKey) });
+          setError(j.error || "Подтвердите, что вы не робот, и отправьте форму снова.");
+          return;
+        }
         setError(j.error || "Ошибка");
+        return;
+      }
+      if (!j.data?.confirmationUrl) {
+        setError("Сервер не вернул ссылку на оплату. Попробуйте ещё раз.");
         return;
       }
       window.location.href = j.data.confirmationUrl;
@@ -584,8 +760,13 @@ export function BookingForm({ object }: { object: ObjectInfo }) {
                   ? object.sections.total * object.sections.capacity
                   : object.maxCapacity
               }
-              value={guests}
-              onChange={(e) => setGuests(Number(e.target.value))}
+              value={guestsInput}
+              onChange={(e) => setGuestsInput(e.target.value)}
+              onBlur={() => {
+                if (guestsInput === "" || Number(guestsInput) < 1) {
+                  setGuestsInput("1");
+                }
+              }}
               required
             />
             <p className="text-xs text-muted-foreground mt-1">
@@ -612,9 +793,16 @@ export function BookingForm({ object }: { object: ObjectInfo }) {
                 <Input
                   type="tel"
                   value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
+                  onChange={(e) => setPhone(formatRuPhone(e.target.value))}
+                  onFocus={() => {
+                    if (!phone) setPhone("+7 ");
+                  }}
                   required
-                  placeholder="+7…"
+                  inputMode="tel"
+                  pattern="\+7 \(\d{3}\) \d{3}-\d{2}-\d{2}"
+                  maxLength={18}
+                  placeholder="+7 (___) ___-__-__"
+                  title="Формат: +7 (XXX) XXX-XX-XX"
                 />
               </div>
             </div>
@@ -623,6 +811,15 @@ export function BookingForm({ object }: { object: ObjectInfo }) {
               <Textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={2} />
             </div>
           </div>
+
+          {captcha.required && (
+            <>
+              <p className="text-xs text-muted-foreground">
+                🛡 При отправке формы выполнится автоматическая проверка SmartCaptcha.
+              </p>
+              <div ref={captchaContainerRef} className="hidden" aria-hidden />
+            </>
+          )}
 
           {error && <p className="text-destructive text-sm">{error}</p>}
 

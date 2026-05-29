@@ -11,8 +11,10 @@ export default defineConfig({
     environment: "node",
     include: ["tests/**/*.test.ts"],
     setupFiles: ["tests/helpers/setup.ts"],
+    // Все тесты в один форк, последовательно: общий sqlite + транзакции
+    // не переносят параллельного запуска.
     fileParallelism: false,
     pool: "forks",
-    poolOptions: { forks: { singleFork: true } },
+    maxWorkers: 1,
   },
 });

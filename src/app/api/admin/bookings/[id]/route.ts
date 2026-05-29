@@ -24,6 +24,17 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   return ok(item);
 }
 
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  if (!(await requireAdmin())) return unauth();
+  try {
+    const { id } = await params;
+    await prisma.booking.delete({ where: { id } });
+    return ok({ id });
+  } catch (e) {
+    return handleError(e);
+  }
+}
+
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!(await requireAdmin())) return unauth();
   try {

@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { prisma } from "@/lib/db";
 import { ExternalLink } from "lucide-react";
+import { AdminMobileNav } from "@/components/admin/AdminMobileNav";
 
 const navItems = [
   { href: "/admin", label: "Дашборд" },
@@ -29,10 +30,23 @@ export default async function AdminPanelLayout({ children }: { children: React.R
   const mainSiteUrl = (branding.mainSiteUrl || "").trim();
   const siteName = branding.siteName || "Админка";
 
+  async function signOutAction() {
+    "use server";
+    await signOut({ redirectTo: "/admin/login" });
+  }
+
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-slate-50">
-      <aside className="w-full md:w-64 bg-white border-r flex md:flex-col flex-row md:sticky md:top-0 md:h-screen">
-        <div className="p-4 border-b md:border-b border-r md:border-r-0 flex items-center gap-3 min-w-0">
+      <AdminMobileNav
+        navItems={navItems}
+        siteName={siteName}
+        logoUrl={logoUrl}
+        userEmail={session.user?.email}
+        mainSiteUrl={mainSiteUrl}
+        signOutAction={signOutAction}
+      />
+      <aside className="hidden md:flex md:w-64 bg-white border-r md:flex-col md:sticky md:top-0 md:h-screen">
+        <div className="p-4 border-b flex items-center gap-3 min-w-0">
           {logoUrl && (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -46,7 +60,7 @@ export default async function AdminPanelLayout({ children }: { children: React.R
             <div className="text-xs text-muted-foreground truncate">{session.user?.email}</div>
           </div>
         </div>
-        <nav className="flex-1 p-2 flex md:flex-col flex-row gap-1 overflow-x-auto md:overflow-x-visible">
+        <nav className="flex-1 p-2 flex flex-col gap-1 overflow-y-auto">
           {navItems.map((item) => (
             <Link
               key={item.href}
@@ -57,7 +71,7 @@ export default async function AdminPanelLayout({ children }: { children: React.R
             </Link>
           ))}
         </nav>
-        <div className="p-2 md:border-t border-l md:border-l-0 flex md:flex-col flex-row gap-2">
+        <div className="p-2 border-t flex flex-col gap-2">
           {mainSiteUrl && (
             <Button asChild variant="outline" size="sm" className="w-full">
               <a href={mainSiteUrl} target="_blank" rel="noopener noreferrer">
@@ -66,13 +80,7 @@ export default async function AdminPanelLayout({ children }: { children: React.R
               </a>
             </Button>
           )}
-          <form
-            action={async () => {
-              "use server";
-              await signOut({ redirectTo: "/admin/login" });
-            }}
-            className="w-full"
-          >
+          <form action={signOutAction} className="w-full">
             <Button type="submit" variant="outline" size="sm" className="w-full">
               Выйти
             </Button>

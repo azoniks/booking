@@ -4,7 +4,9 @@ import { randomBytes } from "node:crypto";
 
 const ROOT = join(process.cwd(), "public", "uploads");
 const ALLOWED = {
-  IMAGE: [".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif", ".svg"],
+  // SVG не допускается: может содержать <script> и onload-обработчики,
+  // что даёт XSS при отдаче файла напрямую с того же origin.
+  IMAGE: [".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif"],
   VIDEO: [".mp4", ".webm", ".mov"],
   PANO360: [".jpg", ".jpeg", ".png", ".webp"],
 };

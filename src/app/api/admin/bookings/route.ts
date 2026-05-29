@@ -62,3 +62,27 @@ export async function POST(req: NextRequest) {
     return handleError(e);
   }
 }
+
+// Массовое удаление по фильтру. Требует ?confirm=1 во избежание случайного запроса.
+export async function DELETE(req: NextRequest) {
+  if (!(await requireAdmin())) return unauth();
+  try {
+    const url = new URL(req.url);
+    if (url.searchParams.get("confirm") !== "1") {
+      return ok({ error: "confirm=1 required" }, 400);
+    }
+    const status = url.searchParams.get("status");
+    const objectId = url.searchParams.get("objectId");
+    const categoryId = url.searchParams.get("cat");
+
+    const where: Prisma.BookingWhereInput = {};
+    if (status) where.status = status as Prisma.EnumBookingStatusFilter["equals"];
+    if (objectId) where.objectId = objectId;
+    if (categoryId) where.object = { objectType: { categoryId } };
+
+    const result = await prisma.booking.deleteMany({ where });
+    return ok({ deleted: result.count });
+  } catch (e) {
+    return handleError(e);
+  }
+}
