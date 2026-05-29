@@ -5,7 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatLocal } from "@/lib/time";
 import { formatRub } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import { BookingActions, BookingDeleteButton } from "@/components/admin/BookingActions";
+import {
+  BookingActions,
+  BookingDeleteButton,
+  BookingRefundButton,
+} from "@/components/admin/BookingActions";
 
 export const dynamic = "force-dynamic";
 
@@ -94,6 +98,12 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
         <CardContent className="flex flex-wrap items-center gap-3">
           {b.status !== "COMPLETED" && (
             <BookingActions id={b.id} status={b.status} />
+          )}
+          {b.payment?.status === "SUCCEEDED" && (
+            <BookingRefundButton
+              id={b.id}
+              amount={formatRub(b.payment.amount.toString())}
+            />
           )}
           <div className="ml-auto">
             <BookingDeleteButton id={b.id} />

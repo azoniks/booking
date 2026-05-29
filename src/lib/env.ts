@@ -2,7 +2,8 @@ import { z } from "zod";
 
 const schema = z.object({
   DATABASE_URL: z.string().url(),
-  AUTH_SECRET: z.string().min(16),
+  // NextAuth рекомендует минимум 32 символа. Сгенерировать: openssl rand -base64 32
+  AUTH_SECRET: z.string().min(32, "AUTH_SECRET должен быть минимум 32 символа (openssl rand -base64 32)"),
   AUTH_URL: z.string().url().optional(),
 
   APP_URL: z.string().url().default("http://localhost:3000"),

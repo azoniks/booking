@@ -4,6 +4,48 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/use-toast";
 
+export function BookingRefundButton({
+  id,
+  amount,
+}: {
+  id: string;
+  amount: string;
+}) {
+  const router = useRouter();
+  async function doRefund() {
+    if (
+      !confirm(
+        `Вернуть клиенту ${amount}? Бронь будет помечена как отменённая.`,
+      )
+    )
+      return;
+    const res = await fetch(`/api/admin/bookings/${id}/refund`, {
+      method: "POST",
+    });
+    const j = await res.json();
+    if (!j.ok) {
+      toast({
+        title: "Ошибка возврата",
+        description: j.error || "Не удалось выполнить возврат",
+        variant: "destructive",
+      });
+      return;
+    }
+    toast({
+      title: "Возврат выполнен",
+      description: j.data?.mock
+        ? "Mock-режим: проводки в Tinkoff не было"
+        : `Tinkoff: ${j.data?.tinkoffStatus || "OK"}`,
+    });
+    router.refresh();
+  }
+  return (
+    <Button variant="destructive" onClick={doRefund}>
+      Вернуть средства
+    </Button>
+  );
+}
+
 export function BookingDeleteButton({ id }: { id: string }) {
   const router = useRouter();
   async function deleteBooking() {
