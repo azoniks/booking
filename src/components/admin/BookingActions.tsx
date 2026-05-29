@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { Trash2, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/use-toast";
 
@@ -40,8 +41,16 @@ export function BookingRefundButton({
     router.refresh();
   }
   return (
-    <Button variant="destructive" onClick={doRefund}>
-      Вернуть средства
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon"
+      onClick={doRefund}
+      aria-label="Вернуть средства"
+      title={`Вернуть ${amount} клиенту (бронь будет отменена)`}
+      className="text-destructive hover:text-destructive hover:bg-destructive/10"
+    >
+      <Undo2 className="w-4 h-4" />
     </Button>
   );
 }
@@ -65,8 +74,16 @@ export function BookingDeleteButton({ id }: { id: string }) {
     router.refresh();
   }
   return (
-    <Button variant="destructive" onClick={deleteBooking}>
-      Удалить бронь
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon"
+      onClick={deleteBooking}
+      aria-label="Удалить бронь"
+      title="Удалить бронь без возможности восстановления"
+      className="text-destructive hover:text-destructive hover:bg-destructive/10"
+    >
+      <Trash2 className="w-4 h-4" />
     </Button>
   );
 }

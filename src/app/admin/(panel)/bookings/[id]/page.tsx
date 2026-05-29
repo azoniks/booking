@@ -64,7 +64,15 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>Платёж</CardTitle></CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+          <CardTitle>Платёж</CardTitle>
+          {b.payment?.status === "SUCCEEDED" && (
+            <BookingRefundButton
+              id={b.id}
+              amount={formatRub(b.payment.amount.toString())}
+            />
+          )}
+        </CardHeader>
         <CardContent className="space-y-1 text-sm">
           <div>Базовая стоимость: {formatRub(b.basePrice.toString())}</div>
           <div>Допгости: {b.extraGuests} ({formatRub(b.extraGuestsCost.toString())})</div>
@@ -99,12 +107,6 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
         <CardContent className="flex flex-wrap items-center gap-3">
           {b.status !== "COMPLETED" && (
             <BookingActions id={b.id} status={b.status} />
-          )}
-          {b.payment?.status === "SUCCEEDED" && (
-            <BookingRefundButton
-              id={b.id}
-              amount={formatRub(b.payment.amount.toString())}
-            />
           )}
           <div className="ml-auto">
             <BookingDeleteButton id={b.id} />
