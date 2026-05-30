@@ -54,7 +54,7 @@ export function ObjectCard({
             </p>
           )}
           <div className="mt-3 text-sm">
-            от <span className="font-bold">{priceFrom.toLocaleString("ru-RU")} ₽</span>
+            <span className="font-bold">{priceFrom.toLocaleString("ru-RU")} ₽</span>
             {bookingMode === "DAILY"
               ? "/сутки"
               : bookingMode === "FULL_DAY"

@@ -18,7 +18,7 @@ export default async function HomePage({
           orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
           include: {
             media: { orderBy: [{ isMain: "desc" }, { sortOrder: "asc" }] },
-            slots: { select: { id: true } },
+            slots: { select: { id: true, priceOverride: true, startTime: true, endTime: true } },
             objects: {
               where: { status: "ACTIVE" },
               orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
@@ -108,6 +108,25 @@ export default async function HomePage({
                 basePrice: t.basePrice.toString(),
                 extraGuestPrice: t.extraGuestPrice.toString(),
                 hasSlots: t.slots.length > 0,
+                slotMinPrice: (() => {
+                  if (t.slots.length === 0) return null;
+                  const base = Number(t.basePrice);
+                  const prices = t.slots.map((s) => {
+                    if (s.priceOverride !== null && s.priceOverride !== undefined) {
+                      return Number(s.priceOverride);
+                    }
+                    const [sh, sm] = s.startTime.split(":").map(Number);
+                    const [eh, em] = s.endTime.split(":").map(Number);
+                    const startMin = sh * 60 + sm;
+                    const endMin = eh * 60 + em;
+                    const crosses = endMin <= startMin;
+                    const hours = crosses
+                      ? 24 - startMin / 60 + endMin / 60
+                      : (endMin - startMin) / 60;
+                    return Math.ceil(hours) * base;
+                  });
+                  return Math.min(...prices);
+                })(),
                 sections:
                   t.sectionsTotal && t.sectionCapacity
                     ? {

@@ -87,7 +87,7 @@ export default async function BookingPage({ params }: { params: Promise<{ object
       : "";
   facts.push({
     icon: <Tag className="w-4 h-4" />,
-    text: `от ${basePrice.toLocaleString("ru-RU")} ₽ / ${unitLabel}${fullVenueNote}${
+    text: `${basePrice.toLocaleString("ru-RU")} ₽ / ${unitLabel}${fullVenueNote}${
       !isSectional && mode !== "FULL_DAY" && Number(t.extraGuestPrice) > 0
         ? ` · доплата ${Math.round(Number(t.extraGuestPrice))} ₽ за допместо`
         : ""

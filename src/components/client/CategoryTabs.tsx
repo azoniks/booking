@@ -25,6 +25,7 @@ export type ObjectType = {
   basePrice: string;
   extraGuestPrice: string;
   hasSlots: boolean;
+  slotMinPrice: number | null;
   sections: {
     total: number;
     capacity: number;
@@ -125,7 +126,11 @@ function TypeSection({
   type: ObjectType;
   bookingMode: "DAILY" | "HOURLY" | "FULL_DAY";
 }) {
-  const priceFrom = Math.round(Number(t.basePrice));
+  // Если у типа есть слоты — показываем минимальную цену слота, а не
+  // базовую почасовую ставку (та вводит в заблуждение для слотов).
+  const priceFrom = Math.round(
+    t.hasSlots && t.slotMinPrice !== null ? t.slotMinPrice : Number(t.basePrice),
+  );
 
   // Все медиа всех объектов типа: главные первыми.
   // Дедупликация по id — fallback с уровня типа может приехать в нескольких
@@ -225,7 +230,6 @@ function TypeSection({
             <div className="flex items-baseline justify-between gap-3">
               <span className="text-sm text-muted-foreground">Стоимость</span>
               <div className="text-right">
-                <span className="text-xs text-muted-foreground">от</span>{" "}
                 <span className="text-2xl font-bold tracking-tight text-gold">
                   {priceFrom.toLocaleString("ru-RU")} ₽
                 </span>
