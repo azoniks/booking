@@ -383,7 +383,7 @@ function ObjectSearchPicker({
             setOpen(true);
             setHoverIdx(0);
           }}
-          onFocus={() => {
+          onClick={() => {
             setOpen(true);
             setQuery("");
             setHoverIdx(0);
@@ -431,7 +431,7 @@ function ObjectSearchPicker({
       </div>
 
       {open && (
-        <div className="absolute left-0 right-0 z-30 mt-1 max-h-64 overflow-y-auto rounded-md border bg-popover shadow-md">
+        <div className="absolute left-0 right-0 z-30 mt-1 max-h-64 overflow-y-auto rounded-md border border-slate-200 bg-white shadow-lg">
           {filtered.length === 0 ? (
             <div className="px-3 py-3 text-sm text-muted-foreground">
               Ничего не найдено
@@ -447,7 +447,7 @@ function ObjectSearchPicker({
                 }}
                 onMouseEnter={() => setHoverIdx(i)}
                 className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between gap-2 ${
-                  i === hoverIdx ? "bg-accent text-accent-foreground" : ""
+                  i === hoverIdx ? "bg-slate-100" : "bg-white hover:bg-slate-50"
                 } ${o.id === value ? "font-medium" : ""}`}
               >
                 <span className="truncate">
