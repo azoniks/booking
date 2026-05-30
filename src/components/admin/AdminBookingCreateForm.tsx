@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import {
   Sheet,
   SheetTrigger,
@@ -140,22 +142,14 @@ export function AdminBookingCreateForm({ objects }: { objects: FormObject[] }) {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div className="md:col-span-2">
                 <Label>Объект</Label>
-                <select
+                <ObjectSearchPicker
+                  objects={objects}
                   value={objectId}
-                  onChange={(e) => {
-                    setObjectId(e.target.value);
+                  onChange={(id) => {
+                    setObjectId(id);
                     setSlotId("");
                   }}
-                  className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
-                  required
-                >
-                  {objects.map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {o.categoryName} → {o.typeName} → {o.name} (
-                      {o.bookingMode === "DAILY" ? "сутки" : o.bookingMode === "FULL_DAY" ? "день" : "часы"})
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
 
               {selected?.bookingMode === "DAILY" && (
@@ -320,5 +314,156 @@ export function AdminBookingCreateForm({ objects }: { objects: FormObject[] }) {
         </form>
       </SheetContent>
     </Sheet>
+  );
+}
+
+function modeLabel(m: FormObject["bookingMode"]): string {
+  return m === "DAILY" ? "сутки" : m === "FULL_DAY" ? "день" : "часы";
+}
+
+function ObjectSearchPicker({
+  objects,
+  value,
+  onChange,
+}: {
+  objects: FormObject[];
+  value: string;
+  onChange: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [hoverIdx, setHoverIdx] = useState(0);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  const selected = useMemo(
+    () => objects.find((o) => o.id === value),
+    [objects, value],
+  );
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return objects;
+    return objects.filter((o) =>
+      `${o.categoryName} ${o.typeName} ${o.name}`.toLowerCase().includes(q),
+    );
+  }, [objects, query]);
+
+  // Закрытие при клике вне
+  useEffect(() => {
+    function onDocClick(e: MouseEvent) {
+      if (!wrapRef.current) return;
+      if (!wrapRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, []);
+
+  function selectObj(o: FormObject) {
+    onChange(o.id);
+    setQuery("");
+    setOpen(false);
+  }
+
+  const displayValue =
+    open || !selected
+      ? query
+      : `${selected.categoryName} → ${selected.typeName} → ${selected.name}`;
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+        <Input
+          ref={inputRef}
+          type="text"
+          value={displayValue}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setOpen(true);
+            setHoverIdx(0);
+          }}
+          onFocus={() => {
+            setOpen(true);
+            setQuery("");
+            setHoverIdx(0);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowDown") {
+              e.preventDefault();
+              setOpen(true);
+              setHoverIdx((i) => Math.min(filtered.length - 1, i + 1));
+            } else if (e.key === "ArrowUp") {
+              e.preventDefault();
+              setHoverIdx((i) => Math.max(0, i - 1));
+            } else if (e.key === "Enter") {
+              e.preventDefault();
+              const item = filtered[hoverIdx];
+              if (item) selectObj(item);
+            } else if (e.key === "Escape") {
+              setOpen(false);
+              inputRef.current?.blur();
+            }
+          }}
+          placeholder={
+            selected ? "Поиск по объектам…" : "Начните вводить название или категорию"
+          }
+          className="pl-9 pr-9"
+          autoComplete="off"
+        />
+        {selected && (
+          <button
+            type="button"
+            aria-label="Сменить объект"
+            title="Сменить объект"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              onChange("");
+              setQuery("");
+              setOpen(true);
+              inputRef.current?.focus();
+            }}
+            className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+
+      {open && (
+        <div className="absolute left-0 right-0 z-30 mt-1 max-h-64 overflow-y-auto rounded-md border bg-popover shadow-md">
+          {filtered.length === 0 ? (
+            <div className="px-3 py-3 text-sm text-muted-foreground">
+              Ничего не найдено
+            </div>
+          ) : (
+            filtered.map((o, i) => (
+              <button
+                key={o.id}
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  selectObj(o);
+                }}
+                onMouseEnter={() => setHoverIdx(i)}
+                className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between gap-2 ${
+                  i === hoverIdx ? "bg-accent text-accent-foreground" : ""
+                } ${o.id === value ? "font-medium" : ""}`}
+              >
+                <span className="truncate">
+                  <span className="text-muted-foreground">
+                    {o.categoryName} → {o.typeName} →
+                  </span>{" "}
+                  {o.name}
+                </span>
+                <Badge variant="outline" className="shrink-0 text-[10px] font-normal">
+                  {modeLabel(o.bookingMode)}
+                </Badge>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
   );
 }
