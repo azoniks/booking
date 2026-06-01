@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { auth, signOut } from "@/lib/auth";
 import { redirect } from "next/navigation";
@@ -5,6 +6,22 @@ import { Button } from "@/components/ui/button";
 import { prisma } from "@/lib/db";
 import { ExternalLink } from "lucide-react";
 import { AdminMobileNav } from "@/components/admin/AdminMobileNav";
+import { InstallAppHint } from "@/components/client/InstallAppHint";
+
+export async function generateMetadata(): Promise<Metadata> {
+  const s = await prisma.settings
+    .findUnique({ where: { key: "siteName" } })
+    .catch(() => null);
+  const siteName = s?.value ? String(s.value) : "Бронирование";
+  return {
+    manifest: "/admin/manifest.webmanifest",
+    appleWebApp: {
+      capable: true,
+      statusBarStyle: "default",
+      title: `Админка — ${siteName}`,
+    },
+  };
+}
 
 const navItems = [
   { href: "/admin", label: "Дашборд" },
@@ -72,6 +89,13 @@ export default async function AdminPanelLayout({ children }: { children: React.R
           ))}
         </nav>
         <div className="p-2 border-t flex flex-col gap-2">
+          <div className="[&_button]:w-full">
+            <InstallAppHint
+              siteName={siteName}
+              appTitle={`Админка — ${siteName}`}
+              dismissKey="installHintDismissed:admin"
+            />
+          </div>
           {mainSiteUrl && (
             <Button asChild variant="outline" size="sm" className="w-full">
               <a href={mainSiteUrl} target="_blank" rel="noopener noreferrer">

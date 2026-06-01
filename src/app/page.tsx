@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { CategoryTabs } from "@/components/client/CategoryTabs";
+import { InstallAppHint } from "@/components/client/InstallAppHint";
 
 export const dynamic = "force-dynamic";
 
@@ -63,6 +64,7 @@ export default async function HomePage({
                 {siteContact}
               </a>
             )}
+            <InstallAppHint siteName={siteName} />
             {mainSiteUrl && (
               <a
                 href={mainSiteUrl}

@@ -13,6 +13,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { InstallAppHint } from "@/components/client/InstallAppHint";
 
 type NavItem = { href: string; label: string };
 
@@ -102,6 +103,13 @@ export function AdminMobileNav({
               })}
             </nav>
             <div className="p-3 border-t flex flex-col gap-2">
+              <div className="[&_button]:w-full">
+                <InstallAppHint
+                  siteName={siteName}
+                  appTitle={`Админка — ${siteName}`}
+                  dismissKey="installHintDismissed:admin"
+                />
+              </div>
               {mainSiteUrl && (
                 <Button asChild variant="outline" size="sm" className="w-full">
                   <a href={mainSiteUrl} target="_blank" rel="noopener noreferrer">
