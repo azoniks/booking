@@ -3,6 +3,7 @@ import { findConflicts } from "./availability";
 import { calcPrice } from "./pricing";
 import { generatePublicCode } from "./utils";
 import { localDateTimeToUtc } from "./time";
+import { addDaysISO } from "./slots";
 import { env } from "./env";
 import { Prisma, PrepaymentType } from "@prisma/client";
 
@@ -38,12 +39,6 @@ export interface CreateBookingArgs {
   guestEmail: string;
   guestPhone: string;
   guestComment?: string;
-}
-
-function addDayISO(dateISO: string): string {
-  const d = new Date(`${dateISO}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + 1);
-  return d.toISOString().slice(0, 10);
 }
 
 /**
@@ -105,11 +100,11 @@ export async function createBooking(args: CreateBookingArgs) {
     if (!args.slotDate) throw new Error("slotDate обязателен для slotId");
     const slot = t.slots.find((s) => s.id === args.slotId);
     if (!slot) throw new Error("Слот не найден или относится к другому типу");
-    const [sh, sm] = slot.startTime.split(":").map(Number);
-    const [eh, em] = slot.endTime.split(":").map(Number);
-    const crosses = eh * 60 + em <= sh * 60 + sm; // через полночь
     startAt = localDateTimeToUtc(args.slotDate, slot.startTime);
-    endAt = localDateTimeToUtc(crosses ? addDayISO(args.slotDate) : args.slotDate, slot.endTime);
+    endAt = localDateTimeToUtc(
+      addDaysISO(args.slotDate, slot.endDayOffset),
+      slot.endTime,
+    );
     slotPriceOverride = slot.priceOverride ? Number(slot.priceOverride) : null;
   } else {
     if (!args.startAt || !args.endAt)

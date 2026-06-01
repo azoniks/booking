@@ -65,6 +65,7 @@ export default async function BookingsPage({
       name: s.name,
       startTime: s.startTime,
       endTime: s.endTime,
+      endDayOffset: s.endDayOffset,
     })),
   }));
 

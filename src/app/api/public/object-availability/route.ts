@@ -152,6 +152,7 @@ export async function GET(req: NextRequest) {
         name: s.name,
         startTime: s.startTime,
         endTime: s.endTime,
+        endDayOffset: s.endDayOffset,
         priceOverride: s.priceOverride ? Number(s.priceOverride) : null,
         sortOrder: s.sortOrder,
       })),

@@ -20,6 +20,7 @@ import {
   SheetClose,
 } from "@/components/ui/sheet";
 import { toast } from "@/components/ui/use-toast";
+import { formatSlotEndSuffix } from "@/lib/slots";
 
 type FormObject = {
   id: string;
@@ -31,7 +32,13 @@ type FormObject = {
   checkOutTime: string | null;
   baseCapacity: number;
   maxCapacity: number;
-  slots: { id: string; name: string; startTime: string; endTime: string }[];
+  slots: {
+    id: string;
+    name: string;
+    startTime: string;
+    endTime: string;
+    endDayOffset: number;
+  }[];
 };
 
 export function AdminBookingCreateForm({ objects }: { objects: FormObject[] }) {
@@ -228,7 +235,7 @@ export function AdminBookingCreateForm({ objects }: { objects: FormObject[] }) {
                           <option value="">— выберите —</option>
                           {selected.slots.map((s) => (
                             <option key={s.id} value={s.id}>
-                              {s.name} ({s.startTime}–{s.endTime})
+                              {s.name} ({s.startTime}–{s.endTime}{formatSlotEndSuffix(s.endDayOffset)})
                             </option>
                           ))}
                         </select>

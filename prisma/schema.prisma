@@ -106,17 +106,19 @@ model ObjectTypeMedia {
   @@index([objectTypeId])
 }
 
-// === Фиксированные слоты для HOURLY-типов (день/ночь/сутки) ===
+// === Фиксированные слоты для HOURLY-типов (день/ночь/сутки/выходные) ===
 // Если у типа есть хотя бы один слот, на клиенте показывается их выбор
 // вместо свободной сетки часов.
-// Если endTime <= startTime — слот переходит через полночь.
+// endDayOffset — на сколько дней endTime смещён относительно даты начала
+// слота (0 = тот же день; 1 = след. день/«ночной»; 2 = +2 дня и т.д.).
 model ObjectTypeSlot {
   id            String     @id @default(cuid())
   objectTypeId  String
   objectType    ObjectType @relation(fields: [objectTypeId], references: [id], onDelete: Cascade)
   name          String
   startTime     String     // "09:00"
-  endTime       String     // "21:00" или "09:00" для ночного с переходом
+  endTime       String     // "21:00"
+  endDayOffset  Int        @default(0)
   priceOverride Decimal?   @db.Decimal(10, 2)
   sortOrder     Int        @default(0)
   createdAt     DateTime   @default(now())

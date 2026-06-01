@@ -16,6 +16,7 @@ import {
 } from "./AvailabilityCalendar";
 import { HourlySlotsPicker } from "./HourlySlotsPicker";
 import { SlotPicker, type Slot } from "./SlotPicker";
+import { slotDurationHours, formatSlotEndSuffix } from "@/lib/slots";
 
 const dateFmt = new Intl.DateTimeFormat("ru-RU", {
   weekday: "short",
@@ -380,15 +381,7 @@ export function BookingForm({ object }: { object: ObjectInfo }) {
       if (!slot) return 0;
       const base = slot.priceOverride !== null
         ? slot.priceOverride
-        : (() => {
-            const [sh, sm] = slot.startTime.split(":").map(Number);
-            const [eh, em] = slot.endTime.split(":").map(Number);
-            const crosses = eh * 60 + em <= sh * 60 + sm;
-            const hours = crosses
-              ? 24 - (sh + sm / 60) + (eh + em / 60)
-              : (eh + em / 60) - (sh + sm / 60);
-            return Math.ceil(hours) * object.basePrice;
-          })();
+        : Math.ceil(slotDurationHours(slot)) * object.basePrice;
       return base + extra * object.extraGuestPrice;
     }
     if (startIdx === null || endIdx === null) return 0;
@@ -732,7 +725,8 @@ export function BookingForm({ object }: { object: ObjectInfo }) {
                   <div className="flex justify-between gap-2">
                     <span className="text-muted-foreground">Слот</span>
                     <span className="text-right">
-                      {summary.slot.name} ({summary.slot.startTime}–{summary.slot.endTime})
+                      {summary.slot.name} ({summary.slot.startTime}–{summary.slot.endTime}
+                      {formatSlotEndSuffix(summary.slot.endDayOffset)})
                     </span>
                   </div>
                 </div>

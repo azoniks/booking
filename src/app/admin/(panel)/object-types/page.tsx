@@ -57,6 +57,7 @@ export default async function ObjectTypesPage() {
             name: s.name,
             startTime: s.startTime,
             endTime: s.endTime,
+            endDayOffset: s.endDayOffset,
             priceOverride: s.priceOverride ? s.priceOverride.toString() : null,
             sortOrder: s.sortOrder,
           })),

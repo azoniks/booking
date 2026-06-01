@@ -352,18 +352,24 @@ describe("createBooking — слоты", () => {
       },
     });
     const day = await testDb.objectTypeSlot.create({
-      data: { objectTypeId: t.id, name: "День", startTime: "09:00", endTime: "21:00", priceOverride: 1000 },
+      data: { objectTypeId: t.id, name: "День", startTime: "09:00", endTime: "21:00", endDayOffset: 0, priceOverride: 1000 },
     });
     const night = await testDb.objectTypeSlot.create({
-      data: { objectTypeId: t.id, name: "Ночь", startTime: "21:00", endTime: "09:00", priceOverride: 1500 },
+      data: { objectTypeId: t.id, name: "Ночь", startTime: "21:00", endTime: "09:00", endDayOffset: 1, priceOverride: 1500 },
     });
     const full = await testDb.objectTypeSlot.create({
-      data: { objectTypeId: t.id, name: "Сутки", startTime: "09:00", endTime: "09:00", priceOverride: 2200 },
+      data: { objectTypeId: t.id, name: "Сутки", startTime: "09:00", endTime: "09:00", endDayOffset: 1, priceOverride: 2200 },
+    });
+    const weekend = await testDb.objectTypeSlot.create({
+      data: { objectTypeId: t.id, name: "Выходные 36ч", startTime: "09:00", endTime: "21:00", endDayOffset: 1, priceOverride: 3500 },
+    });
+    const twoDay = await testDb.objectTypeSlot.create({
+      data: { objectTypeId: t.id, name: "Двое суток", startTime: "09:00", endTime: "09:00", endDayOffset: 2, priceOverride: 4000 },
     });
     const obj = await testDb.bookingObject.create({
       data: { objectTypeId: t.id, name: "Мостик", slug: `bridge-${Date.now()}` },
     });
-    return { obj, day, night, full };
+    return { obj, day, night, full, weekend, twoDay };
   }
 
   it("дневной слот: 09:00→21:00, цена = priceOverride", async () => {
@@ -448,6 +454,80 @@ describe("createBooking — слоты", () => {
         ...guest,
       }),
     ).rejects.toBeInstanceOf(BookingConflictError);
+  });
+
+  it("слот 36ч: 09:00 → 21:00 след. дня (endDayOffset=1)", async () => {
+    const { obj, weekend } = await seedFishingSpot();
+    const b = await createBooking({
+      objectId: obj.id,
+      slotId: weekend.id,
+      slotDate: "2026-07-25",
+      guestsCount: 2,
+      ...guest,
+    });
+    expect(b.startAt.toISOString()).toBe("2026-07-25T06:00:00.000Z");
+    expect(b.endAt.toISOString()).toBe("2026-07-26T18:00:00.000Z");
+    expect(b.totalPrice.toString()).toBe("3500");
+  });
+
+  it("слот 48ч: 09:00 → 09:00 +2 дня (endDayOffset=2)", async () => {
+    const { obj, twoDay } = await seedFishingSpot();
+    const b = await createBooking({
+      objectId: obj.id,
+      slotId: twoDay.id,
+      slotDate: "2026-07-25",
+      guestsCount: 2,
+      ...guest,
+    });
+    expect(b.startAt.toISOString()).toBe("2026-07-25T06:00:00.000Z");
+    expect(b.endAt.toISOString()).toBe("2026-07-27T06:00:00.000Z");
+    expect(b.totalPrice.toString()).toBe("4000");
+  });
+
+  it("слот 36ч в пятницу блокирует бронирование того же объекта в субботу", async () => {
+    const { obj, weekend, day } = await seedFishingSpot();
+    // 36ч: пт 25.07 09:00 → сб 26.07 21:00
+    await createBooking({
+      objectId: obj.id,
+      slotId: weekend.id,
+      slotDate: "2026-07-25",
+      guestsCount: 2,
+      ...guest,
+    });
+    // дневной слот в сб 26.07 09:00–21:00 — пересекается
+    await expect(
+      createBooking({
+        objectId: obj.id,
+        slotId: day.id,
+        slotDate: "2026-07-26",
+        guestsCount: 2,
+        ...guest,
+      }),
+    ).rejects.toBeInstanceOf(BookingConflictError);
+  });
+});
+
+describe("slotCreateSchema validation", () => {
+  it("отвергает endTime <= startTime при endDayOffset=0", async () => {
+    const { slotCreateSchema } = await import("../src/lib/validators");
+    const res = slotCreateSchema.safeParse({
+      name: "Сломанный",
+      startTime: "21:00",
+      endTime: "09:00",
+      endDayOffset: 0,
+    });
+    expect(res.success).toBe(false);
+  });
+
+  it("принимает endTime <= startTime при endDayOffset>=1", async () => {
+    const { slotCreateSchema } = await import("../src/lib/validators");
+    const res = slotCreateSchema.safeParse({
+      name: "Ночь",
+      startTime: "21:00",
+      endTime: "09:00",
+      endDayOffset: 1,
+    });
+    expect(res.success).toBe(true);
   });
 });
 

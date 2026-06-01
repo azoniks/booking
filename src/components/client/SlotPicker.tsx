@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { DayPicker } from "react-day-picker";
 import { ru } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { addDaysISO, formatSlotEndSuffix } from "@/lib/slots";
 import type { BusyInterval } from "./AvailabilityCalendar";
 
 const TZ_OFFSET_MIN = 180;
@@ -14,6 +15,7 @@ export type Slot = {
   name: string;
   startTime: string;
   endTime: string;
+  endDayOffset: number;
   priceOverride: number | null;
 };
 
@@ -28,19 +30,13 @@ function isoDate(d: Date): string {
   return local.toISOString().slice(0, 10);
 }
 
-function addDayISO(dateISO: string): string {
-  const d = new Date(`${dateISO}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + 1);
-  return d.toISOString().slice(0, 10);
-}
-
 function slotIntervalsForDate(slot: Slot, dateISO: string) {
-  const [sh, sm] = slot.startTime.split(":").map(Number);
-  const [eh, em] = slot.endTime.split(":").map(Number);
-  const crosses = eh * 60 + em <= sh * 60 + sm;
   const startAt = localDateTimeToUtc(dateISO, slot.startTime);
-  const endAt = localDateTimeToUtc(crosses ? addDayISO(dateISO) : dateISO, slot.endTime);
-  return { startAt, endAt, crosses };
+  const endAt = localDateTimeToUtc(
+    addDaysISO(dateISO, slot.endDayOffset),
+    slot.endTime,
+  );
+  return { startAt, endAt };
 }
 
 function intersects(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date) {
@@ -69,9 +65,9 @@ export function SlotPicker({
   // Кандидатные интервалы каждого слота для выбранной даты с учётом уборки
   const dateISO = selectedDate ? isoDate(selectedDate) : null;
   const slotStates = useMemo(() => {
-    if (!dateISO) return [] as { slot: Slot; busy: boolean; past: boolean; startAt: Date; endAt: Date; crosses: boolean }[];
+    if (!dateISO) return [] as { slot: Slot; busy: boolean; past: boolean; startAt: Date; endAt: Date }[];
     return slots.map((slot) => {
-      const { startAt, endAt, crosses } = slotIntervalsForDate(slot, dateISO);
+      const { startAt, endAt } = slotIntervalsForDate(slot, dateISO);
       const blockedUntil = new Date(endAt.getTime() + cleaningMinutes * 60_000);
       const past = blockedUntil.getTime() <= Date.now();
       let occupied = false;
@@ -83,7 +79,7 @@ export function SlotPicker({
           break;
         }
       }
-      return { slot, busy: occupied, past, startAt, endAt, crosses };
+      return { slot, busy: occupied, past, startAt, endAt };
     });
   }, [slots, dateISO, busy, cleaningMinutes]);
 
@@ -117,7 +113,7 @@ export function SlotPicker({
         )}
         {selectedDate && slots.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {slotStates.map(({ slot, busy: occ, past, crosses }) => {
+            {slotStates.map(({ slot, busy: occ, past }) => {
               const disabled = occ || past;
               const selected = slot.id === selectedSlotId;
               return (
@@ -137,7 +133,7 @@ export function SlotPicker({
                   <div className="font-medium">{slot.name}</div>
                   <div className="text-xs">
                     {slot.startTime} — {slot.endTime}
-                    {crosses && " (след. день)"}
+                    {formatSlotEndSuffix(slot.endDayOffset)}
                   </div>
                   {basePriceLabel && (
                     <div className="text-xs mt-1 opacity-80">{basePriceLabel(slot)}</div>

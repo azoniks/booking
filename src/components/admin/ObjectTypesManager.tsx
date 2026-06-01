@@ -12,12 +12,18 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "@/components/ui/use-toast";
 import { useFormDirty } from "./_hooks";
 import { RichTextEditor } from "./RichTextEditor";
+import {
+  SLOT_END_DAY_OPTIONS,
+  formatSlotEndSuffix,
+  slotDurationHours,
+} from "@/lib/slots";
 
 export type Slot = {
   id: string;
   name: string;
   startTime: string;
   endTime: string;
+  endDayOffset: number;
   priceOverride: string | null;
   sortOrder: number;
 };
@@ -310,6 +316,7 @@ function SlotsEditor({ typeId, initial }: { typeId: string; initial: Slot[] }) {
         name: fd.get("name"),
         startTime: fd.get("startTime"),
         endTime: fd.get("endTime"),
+        endDayOffset: Number(fd.get("endDayOffset") || 0),
         priceOverride: fd.get("priceOverride") ? Number(fd.get("priceOverride")) : null,
         sortOrder: Number(fd.get("sortOrder") || 0),
       }),
@@ -344,7 +351,7 @@ function SlotsEditor({ typeId, initial }: { typeId: string; initial: Slot[] }) {
       </div>
 
       {open && (
-        <form ref={formRef} onSubmit={add} className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-3">
+        <form ref={formRef} onSubmit={add} className="grid grid-cols-2 md:grid-cols-6 gap-2 mb-3">
           <div>
             <Label className="text-xs">Название</Label>
             <Input name="name" required placeholder="День" />
@@ -358,6 +365,20 @@ function SlotsEditor({ typeId, initial }: { typeId: string; initial: Slot[] }) {
             <Input name="endTime" required placeholder="21:00" pattern="\d{2}:\d{2}" />
           </div>
           <div>
+            <Label className="text-xs">Конец слота</Label>
+            <select
+              name="endDayOffset"
+              defaultValue={0}
+              className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+            >
+              {SLOT_END_DAY_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
             <Label className="text-xs">Цена ₽ (опц.)</Label>
             <Input name="priceOverride" type="number" step="0.01" placeholder="по basePrice" />
           </div>
@@ -365,7 +386,7 @@ function SlotsEditor({ typeId, initial }: { typeId: string; initial: Slot[] }) {
             <Label className="text-xs">Порядок</Label>
             <Input name="sortOrder" type="number" defaultValue={initial.length} />
           </div>
-          <div className="md:col-span-5 flex gap-2 justify-end">
+          <div className="col-span-2 md:col-span-6 flex gap-2 justify-end">
             <Button type="button" size="sm" variant="outline" onClick={() => setOpen(false)}>
               Отмена
             </Button>
@@ -403,6 +424,7 @@ function SlotRow({ slot }: { slot: Slot }) {
         name: fd.get("name"),
         startTime: fd.get("startTime"),
         endTime: fd.get("endTime"),
+        endDayOffset: Number(fd.get("endDayOffset") || 0),
         priceOverride: priceTrim !== "" ? Number(priceTrim) : null,
         sortOrder: Number(fd.get("sortOrder") || 0),
       }),
@@ -442,7 +464,7 @@ function SlotRow({ slot }: { slot: Slot }) {
     return (
       <form
         onSubmit={save}
-        className="md:col-span-2 grid grid-cols-2 md:grid-cols-5 gap-2 p-2 rounded-md border bg-slate-50"
+        className="md:col-span-2 grid grid-cols-2 md:grid-cols-6 gap-2 p-2 rounded-md border bg-slate-50"
       >
         <div>
           <Label className="text-xs">Название</Label>
@@ -467,6 +489,20 @@ function SlotRow({ slot }: { slot: Slot }) {
           />
         </div>
         <div>
+          <Label className="text-xs">Конец слота</Label>
+          <select
+            name="endDayOffset"
+            defaultValue={slot.endDayOffset}
+            className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+          >
+            {SLOT_END_DAY_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
           <Label className="text-xs">Цена ₽ (опц.)</Label>
           <Input
             name="priceOverride"
@@ -480,7 +516,7 @@ function SlotRow({ slot }: { slot: Slot }) {
           <Label className="text-xs">Порядок</Label>
           <Input name="sortOrder" type="number" defaultValue={slot.sortOrder} />
         </div>
-        <div className="col-span-2 md:col-span-5 flex gap-2 justify-end">
+        <div className="col-span-2 md:col-span-6 flex gap-2 justify-end">
           <Button
             type="button"
             size="sm"
@@ -498,9 +534,7 @@ function SlotRow({ slot }: { slot: Slot }) {
     );
   }
 
-  const [sh, sm] = slot.startTime.split(":").map(Number);
-  const [eh, em] = slot.endTime.split(":").map(Number);
-  const crosses = eh * 60 + em <= sh * 60 + sm;
+  const durationH = slotDurationHours(slot);
 
   return (
     <div className="flex items-center justify-between p-2 rounded-md border gap-2">
@@ -508,8 +542,11 @@ function SlotRow({ slot }: { slot: Slot }) {
         <span className="font-medium">{slot.name}</span>{" "}
         <span className="text-muted-foreground">
           {slot.startTime}–{slot.endTime}
-          {crosses && " (след. день)"}
+          {formatSlotEndSuffix(slot.endDayOffset)}
         </span>
+        {durationH > 0 && (
+          <span className="ml-2 text-xs text-muted-foreground">· {durationH} ч</span>
+        )}
         {slot.priceOverride && (
           <span className="ml-2 text-xs text-muted-foreground">
             · {slot.priceOverride} ₽

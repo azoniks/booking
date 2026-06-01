@@ -156,21 +156,39 @@ export const adminUpdateSchema = z.object({
 
 export const settingsUpdateSchema = z.record(z.string(), z.any());
 
-// startTime === endTime трактуется как суточный слот через полночь
-// (booking-service ставит endAt на следующий день при endTime <= startTime).
-export const slotCreateSchema = z.object({
-  name: z.string().min(1).max(50),
-  startTime: HHMM,
-  endTime: HHMM,
-  priceOverride: z.coerce.number().nonnegative().optional().nullable(),
-  sortOrder: z.coerce.number().int().default(0),
-});
+// endDayOffset: на сколько дней endTime смещён относительно даты начала
+// (0 — тот же день, 1 — след. день и т.д.). Длительность слота должна
+// быть положительной: endDayOffset * 1440 + endMin - startMin > 0.
+const slotDurationPositive = (v: {
+  startTime: string;
+  endTime: string;
+  endDayOffset: number;
+}) => {
+  const [sh, sm] = v.startTime.split(":").map(Number);
+  const [eh, em] = v.endTime.split(":").map(Number);
+  return v.endDayOffset * 1440 + (eh * 60 + em) - (sh * 60 + sm) > 0;
+};
+
+export const slotCreateSchema = z
+  .object({
+    name: z.string().min(1).max(50),
+    startTime: HHMM,
+    endTime: HHMM,
+    endDayOffset: z.coerce.number().int().min(0).max(7).default(0),
+    priceOverride: z.coerce.number().nonnegative().optional().nullable(),
+    sortOrder: z.coerce.number().int().default(0),
+  })
+  .refine(slotDurationPositive, {
+    message: "Длительность слота должна быть больше нуля",
+    path: ["endTime"],
+  });
 
 export const slotUpdateSchema = z
   .object({
     name: z.string().min(1).max(50).optional(),
     startTime: HHMM.optional(),
     endTime: HHMM.optional(),
+    endDayOffset: z.coerce.number().int().min(0).max(7).optional(),
     priceOverride: z.coerce.number().nonnegative().optional().nullable(),
     sortOrder: z.coerce.number().int().optional(),
   });
