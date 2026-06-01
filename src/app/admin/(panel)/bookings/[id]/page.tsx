@@ -10,6 +10,7 @@ import {
   BookingDeleteButton,
   BookingRefundButton,
 } from "@/components/admin/BookingActions";
+import { AdminBookingEditForm } from "@/components/admin/AdminBookingEditForm";
 import { BookingNotificationsTable } from "@/components/admin/BookingNotificationsTable";
 
 export const dynamic = "force-dynamic";
@@ -34,6 +35,19 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
       <div className="flex items-center gap-3 flex-wrap">
         <h1 className="text-2xl font-bold">Бронь {b.publicCode}</h1>
         <StatusBadge status={b.status} />
+        <div className="ml-auto">
+          <AdminBookingEditForm
+            id={b.id}
+            initial={{
+              guestName: b.guestName,
+              guestEmail: b.guestEmail,
+              guestPhone: b.guestPhone,
+              guestComment: b.guestComment,
+              guestsCount: b.guestsCount,
+            }}
+            maxCapacity={b.object.objectType.maxCapacity}
+          />
+        </div>
       </div>
 
       <Card>

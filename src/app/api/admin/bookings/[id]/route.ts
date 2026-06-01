@@ -7,6 +7,11 @@ import { z } from "zod";
 const patchSchema = z.object({
   status: z.enum(["PENDING", "PAID", "CANCELLED", "COMPLETED", "NO_SHOW"]).optional(),
   cancelReason: z.string().max(500).optional(),
+  guestName: z.string().min(2).max(100).optional(),
+  guestEmail: z.string().email().or(z.literal("")).optional(),
+  guestPhone: z.string().min(1).max(30).optional(),
+  guestComment: z.string().max(1000).optional().nullable(),
+  guestsCount: z.coerce.number().int().min(1).max(50).optional(),
 });
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -41,6 +46,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const { id } = await params;
     const body = patchSchema.parse(await req.json());
     const data: Record<string, unknown> = { ...body };
+    if (typeof body.guestName === "string") data.guestName = body.guestName.trim();
+    if (typeof body.guestEmail === "string") data.guestEmail = body.guestEmail.trim().toLowerCase();
+    if (typeof body.guestPhone === "string") data.guestPhone = body.guestPhone.trim();
+    if (body.guestComment !== undefined) {
+      const c = (body.guestComment ?? "").trim();
+      data.guestComment = c || null;
+    }
     if (body.status === "CANCELLED") {
       data.cancelledAt = new Date();
     }
