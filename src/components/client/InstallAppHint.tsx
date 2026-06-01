@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Download, Share, MoreVertical, Plus } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Download, Share, MoreVertical, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -41,30 +42,40 @@ function isStandalone(): boolean {
 }
 
 const DEFAULT_DISMISS_KEY = "installHintDismissed";
+const BANNER_DELAY_MS = 2500;
 
 export function InstallAppHint({
   siteName,
   appTitle,
   dismissKey = DEFAULT_DISMISS_KEY,
+  showBanner = true,
+  showButton = true,
 }: {
   siteName: string;
   appTitle?: string;
   dismissKey?: string;
+  showBanner?: boolean;
+  showButton?: boolean;
 }) {
   const title = appTitle ?? siteName;
+  const sessionKey = `${dismissKey}:session`;
+
   const [mounted, setMounted] = useState(false);
   const [platform, setPlatform] = useState<Platform>("other");
   const [standalone, setStandalone] = useState(false);
   const [deferred, setDeferred] = useState<BIPEvent | null>(null);
   const [open, setOpen] = useState(false);
-  const [dismissed, setDismissed] = useState(false);
+  const [permDismissed, setPermDismissed] = useState(false);
+  const [sessionDismissed, setSessionDismissed] = useState(false);
+  const [bannerReady, setBannerReady] = useState(false);
 
   useEffect(() => {
     setMounted(true);
     setPlatform(detectPlatform());
     setStandalone(isStandalone());
     try {
-      setDismissed(localStorage.getItem(dismissKey) === "1");
+      setPermDismissed(localStorage.getItem(dismissKey) === "1");
+      setSessionDismissed(sessionStorage.getItem(sessionKey) === "1");
     } catch {}
 
     const onPrompt = (e: Event) => {
@@ -77,68 +88,156 @@ export function InstallAppHint({
     };
     window.addEventListener("beforeinstallprompt", onPrompt);
     window.addEventListener("appinstalled", onInstalled);
+
+    const t = window.setTimeout(() => setBannerReady(true), BANNER_DELAY_MS);
+
     return () => {
       window.removeEventListener("beforeinstallprompt", onPrompt);
       window.removeEventListener("appinstalled", onInstalled);
+      window.clearTimeout(t);
     };
-  }, []);
+  }, [dismissKey, sessionKey]);
 
-  if (!mounted || standalone || dismissed) return null;
+  if (!mounted || standalone) return null;
 
   async function handleInstall() {
-    if (!deferred) return;
-    await deferred.prompt();
-    const choice = await deferred.userChoice;
-    setDeferred(null);
-    if (choice.outcome === "accepted") {
-      setOpen(false);
+    if (deferred) {
+      await deferred.prompt();
+      const choice = await deferred.userChoice;
+      setDeferred(null);
+      if (choice.outcome === "accepted") {
+        setOpen(false);
+      }
+    } else {
+      setOpen(true);
     }
   }
 
-  function handleDismiss() {
+  function handlePermDismiss() {
     try {
       localStorage.setItem(dismissKey, "1");
     } catch {}
-    setDismissed(true);
+    setPermDismissed(true);
+    setOpen(false);
   }
 
+  function handleSessionDismiss() {
+    try {
+      sessionStorage.setItem(sessionKey, "1");
+    } catch {}
+    setSessionDismissed(true);
+  }
+
+  const bannerVisible =
+    showBanner && bannerReady && !permDismissed && !sessionDismissed;
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button
-          variant="outline"
-          size="sm"
-          className="gap-1.5"
-          aria-label="Установить как приложение"
-        >
-          <Download className="w-4 h-4" />
-          <span className="hidden sm:inline">Установить приложение</span>
-          <span className="sm:hidden">Приложение</span>
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Установить «{title}»</DialogTitle>
-          <DialogDescription>
-            Добавьте сайт на главный экран — он будет открываться как обычное
-            приложение, без адресной строки браузера.
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={setOpen}>
+        {showButton && (
+          <DialogTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              aria-label="Установить как приложение"
+            >
+              <Download className="w-4 h-4" />
+              <span className="hidden sm:inline">Установить приложение</span>
+              <span className="sm:hidden">Приложение</span>
+            </Button>
+          </DialogTrigger>
+        )}
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Установить «{title}»</DialogTitle>
+            <DialogDescription>
+              Добавьте сайт на главный экран — он будет открываться как обычное
+              приложение, без адресной строки браузера.
+            </DialogDescription>
+          </DialogHeader>
 
-        <Instructions platform={platform} canPrompt={Boolean(deferred)} />
+          <Instructions platform={platform} canPrompt={Boolean(deferred)} />
 
-        <div className="flex flex-wrap justify-end gap-2 pt-2">
-          <Button variant="ghost" size="sm" onClick={handleDismiss}>
-            Больше не показывать
+          <div className="flex flex-wrap justify-end gap-2 pt-2">
+            <Button variant="ghost" size="sm" onClick={handlePermDismiss}>
+              Больше не показывать
+            </Button>
+            {deferred && (
+              <Button size="sm" onClick={handleInstall}>
+                Установить
+              </Button>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {bannerVisible &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <InstallBanner
+            title={title}
+            canPrompt={Boolean(deferred)}
+            onInstall={handleInstall}
+            onDetails={() => setOpen(true)}
+            onClose={handleSessionDismiss}
+          />,
+          document.body,
+        )}
+    </>
+  );
+}
+
+function InstallBanner({
+  title,
+  canPrompt,
+  onInstall,
+  onDetails,
+  onClose,
+}: {
+  title: string;
+  canPrompt: boolean;
+  onInstall: () => void;
+  onDetails: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      role="dialog"
+      aria-label="Установка приложения"
+      className="fixed z-50 bottom-3 left-3 right-3 sm:left-auto sm:right-4 sm:bottom-4 sm:max-w-sm rounded-xl border bg-white shadow-xl p-3.5 flex items-start gap-3 animate-in slide-in-from-bottom-4 fade-in duration-300"
+      style={{ paddingBottom: "max(0.875rem, env(safe-area-inset-bottom))" }}
+    >
+      <div className="rounded-full bg-primary/10 p-2 shrink-0">
+        <Download className="w-5 h-5 text-primary" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="font-medium text-sm leading-tight">
+          Установить «{title}»
+        </div>
+        <p className="text-xs text-muted-foreground mt-1">
+          Откройте сайт как приложение, без адресной строки.
+        </p>
+        <div className="flex flex-wrap gap-2 mt-2.5">
+          <Button size="sm" onClick={onInstall} className="h-8">
+            {canPrompt ? "Установить" : "Как установить"}
           </Button>
-          {deferred && (
-            <Button size="sm" onClick={handleInstall}>
-              Установить
+          {canPrompt && (
+            <Button variant="ghost" size="sm" onClick={onDetails} className="h-8">
+              Инструкция
             </Button>
           )}
         </div>
-      </DialogContent>
-    </Dialog>
+      </div>
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Закрыть"
+        className="text-muted-foreground hover:text-foreground p-1 -m-1 shrink-0"
+      >
+        <X className="w-4 h-4" />
+      </button>
+    </div>
   );
 }
 

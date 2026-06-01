@@ -108,6 +108,7 @@ export function AdminMobileNav({
                   siteName={siteName}
                   appTitle={`Админка — ${siteName}`}
                   dismissKey="installHintDismissed:admin"
+                  showBanner={false}
                 />
               </div>
               {mainSiteUrl && (
