@@ -78,6 +78,7 @@ export async function GET(req: NextRequest) {
         .map((t) => ({
           id: t.id,
           name: t.name,
+          categoryId: t.categoryId,
           categoryName: t.category.name,
           bookingMode: t.category.bookingMode,
           cleaningMinutes: t.cleaningMinutes,

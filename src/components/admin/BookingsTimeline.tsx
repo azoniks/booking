@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -17,6 +17,7 @@ type ObjectRow = { id: string; name: string; slug: string; status: string };
 type TypeRow = {
   id: string;
   name: string;
+  categoryId: string;
   categoryName: string;
   bookingMode: "DAILY" | "HOURLY" | "FULL_DAY";
   cleaningMinutes: number;
@@ -67,6 +68,8 @@ export function BookingsTimeline() {
   const [mode, setMode] = useState<Mode>("days");
   const [from, setFrom] = useState(() => isoDate(startOfMonth(new Date())));
   const [to, setTo] = useState(() => isoDate(endOfMonth(new Date())));
+  const [selectedCats, setSelectedCats] = useState<string[]>([]);
+  const [selectedTypeIds, setSelectedTypeIds] = useState<string[]>([]);
   const [data, setData] = useState<{
     types: TypeRow[];
     bookings: BookingItem[];
@@ -161,13 +164,40 @@ export function BookingsTimeline() {
     return leftPxFor(now.toISOString());
   })();
 
-  // В режиме hours скрываем DAILY-типы — у них некуда ставить часовые брони
-  const visibleTypes = useMemo(() => {
+  // Базовый список типов с учётом режима:
+  // в режиме hours скрываем DAILY-типы — у них некуда ставить часовые брони
+  const baseTypes = useMemo(() => {
     if (!data) return [];
     return mode === "hours"
       ? data.types.filter((t) => t.bookingMode === "HOURLY")
       : data.types;
   }, [data, mode]);
+
+  // Уникальные категории и виды объектов (для фильтров).
+  // Виды сужаются выбранными категориями.
+  const catOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const t of baseTypes) if (!seen.has(t.categoryId)) seen.set(t.categoryId, t.categoryName);
+    return Array.from(seen, ([id, label]) => ({ id, label }));
+  }, [baseTypes]);
+
+  const typeOptions = useMemo(() => {
+    const inCats =
+      selectedCats.length > 0
+        ? baseTypes.filter((t) => selectedCats.includes(t.categoryId))
+        : baseTypes;
+    return inCats.map((t) => ({ id: t.id, label: `${t.categoryName} · ${t.name}` }));
+  }, [baseTypes, selectedCats]);
+
+  // Итоговый список строк с применёнными фильтрами (категория И вид — через AND)
+  const visibleTypes = useMemo(() => {
+    let result = baseTypes;
+    if (selectedCats.length > 0) result = result.filter((t) => selectedCats.includes(t.categoryId));
+    if (selectedTypeIds.length > 0) result = result.filter((t) => selectedTypeIds.includes(t.id));
+    return result;
+  }, [baseTypes, selectedCats, selectedTypeIds]);
+
+  const filtersActive = selectedCats.length > 0 || selectedTypeIds.length > 0;
 
   return (
     <Card>
@@ -282,6 +312,42 @@ export function BookingsTimeline() {
               className="w-44"
             />
           </div>
+          {/* Фильтры по категориям и видам объектов */}
+          <div className="flex items-end gap-2 flex-wrap">
+            <MultiSelectFilter
+              label="Категории"
+              options={catOptions}
+              selected={selectedCats}
+              onChange={(next) => {
+                setSelectedCats(next);
+                // убираем виды, не относящиеся к выбранным категориям
+                if (next.length > 0 && data) {
+                  const allowed = new Set(
+                    data.types.filter((t) => next.includes(t.categoryId)).map((t) => t.id),
+                  );
+                  setSelectedTypeIds((prev) => prev.filter((id) => allowed.has(id)));
+                }
+              }}
+            />
+            <MultiSelectFilter
+              label="Виды объектов"
+              options={typeOptions}
+              selected={selectedTypeIds}
+              onChange={setSelectedTypeIds}
+            />
+            {filtersActive && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setSelectedCats([]);
+                  setSelectedTypeIds([]);
+                }}
+              >
+                Сбросить фильтры
+              </Button>
+            )}
+          </div>
           <div className="text-xs text-muted-foreground ml-auto flex items-center gap-3 flex-wrap">
             <Legend color="bg-emerald-500" label="оплачено" />
             <Legend color="bg-amber-400" label="ожидает оплаты" />
@@ -294,9 +360,11 @@ export function BookingsTimeline() {
           <div className="p-6 text-sm text-muted-foreground">Загрузка…</div>
         ) : visibleTypes.length === 0 ? (
           <div className="p-6 text-sm text-muted-foreground">
-            {mode === "hours"
-              ? "Нет почасовых типов объектов."
-              : "Объектов пока нет — добавьте через раздел «Объекты»."}
+            {filtersActive
+              ? "Нет объектов под выбранные фильтры."
+              : mode === "hours"
+                ? "Нет почасовых типов объектов."
+                : "Объектов пока нет — добавьте через раздел «Объекты»."}
           </div>
         ) : (
           <div className="flex border-t">
@@ -460,6 +528,72 @@ export function BookingsTimeline() {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function MultiSelectFilter({
+  label,
+  options,
+  selected,
+  onChange,
+}: {
+  label: string;
+  options: { id: string; label: string }[];
+  selected: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const count = selected.length;
+  function toggle(id: string) {
+    onChange(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]);
+  }
+  return (
+    <div className="relative">
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        onClick={() => setOpen((o) => !o)}
+        className={cn(count > 0 && "border-primary text-primary")}
+      >
+        {label}
+        {count > 0 && ` · ${count}`}
+        <ChevronDown className="w-3.5 h-3.5 ml-1" />
+      </Button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 mt-1 z-30 w-60 max-h-72 overflow-auto rounded-md border bg-white shadow-lg p-1 text-sm">
+            {count > 0 && (
+              <button
+                type="button"
+                className="w-full text-left px-2 py-1.5 rounded hover:bg-slate-50 text-muted-foreground"
+                onClick={() => onChange([])}
+              >
+                Сбросить
+              </button>
+            )}
+            {options.length === 0 ? (
+              <div className="px-2 py-1.5 text-muted-foreground">Нет вариантов</div>
+            ) : (
+              options.map((opt) => (
+                <label
+                  key={opt.id}
+                  className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-50 cursor-pointer"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selected.includes(opt.id)}
+                    onChange={() => toggle(opt.id)}
+                  />
+                  <span className="truncate">{opt.label}</span>
+                </label>
+              ))
+            )}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
