@@ -35,7 +35,7 @@ export function CategoriesManager({ initial }: { initial: Category[] }) {
   const [editing, setEditing] = useState<Category | null>(null);
   const [creating, setCreating] = useState(false);
 
-  async function save(form: FormData, id?: string) {
+  async function save(form: FormData, id?: string, force = false) {
     const data = {
       name: form.get("name"),
       slug: form.get("slug") || undefined,
@@ -43,6 +43,7 @@ export function CategoriesManager({ initial }: { initial: Category[] }) {
       sortOrder: Number(form.get("sortOrder") || 0),
       isVisible: form.get("isVisible") === "on",
       bookingMode: form.get("bookingMode"),
+      ...(force ? { force: true } : {}),
     };
     const res = await fetch(id ? `/api/admin/categories/${id}` : "/api/admin/categories", {
       method: id ? "PATCH" : "POST",
@@ -51,6 +52,14 @@ export function CategoriesManager({ initial }: { initial: Category[] }) {
     });
     const j = await res.json();
     if (!j.ok) {
+      // Смена режима при наличии активных броней с несоответствующим временем —
+      // требуем явного подтверждения и повторяем запрос с force.
+      if (res.status === 409 && j.details?.needsConfirmation) {
+        if (confirm(`${j.error}\n\nВсё равно сменить режим?`)) {
+          return save(form, id, true);
+        }
+        return;
+      }
       toast({ title: "Ошибка", description: j.error || "Не удалось сохранить", variant: "destructive" });
       return;
     }
@@ -170,6 +179,13 @@ function CategoryForm({
           <option value="HOURLY">Часы</option>
           <option value="FULL_DAY">День (беседки/площадки целиком на день)</option>
         </select>
+        {isEdit && (
+          <p className="text-xs text-muted-foreground mt-1">
+            Смену режима можно делать в любой момент. Активные брони с
+            несовпадающим временем сохранятся как есть — система предупредит и
+            спросит подтверждение.
+          </p>
+        )}
       </div>
       <div>
         <Label>Порядок (вкладка)</Label>
