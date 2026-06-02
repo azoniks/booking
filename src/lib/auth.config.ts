@@ -14,8 +14,11 @@ export const authConfig = {
       const path = request.nextUrl.pathname;
       const isAdmin = path.startsWith("/admin");
       const isLogin = path.startsWith("/admin/login");
+      // PWA-манифест админки должен быть доступен и без авторизации
+      // (его запрашивает браузер на странице логина для установки приложения).
+      const isManifest = path === "/admin/manifest.webmanifest";
       if (!isAdmin) return true;
-      if (isLogin) return true;
+      if (isLogin || isManifest) return true;
       return !!auth;
     },
     jwt: async ({ token, user }) => {

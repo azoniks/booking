@@ -8,6 +8,8 @@ import { ExternalLink } from "lucide-react";
 import { AdminMobileNav } from "@/components/admin/AdminMobileNav";
 import { InstallAppHint } from "@/components/client/InstallAppHint";
 
+// Переопределяем манифест на админский, чтобы установка PWA из панели
+// давала ярлык на /admin, а не на клиентскую часть (корневой layout).
 export async function generateMetadata(): Promise<Metadata> {
   const s = await prisma.settings
     .findUnique({ where: { key: "siteName" } })
