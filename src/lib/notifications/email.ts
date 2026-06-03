@@ -281,6 +281,132 @@ export async function sendPaidNotifications(bookingId: string) {
   ]);
 }
 
+async function loadGroup(groupId: string) {
+  return prisma.bookingGroup.findUnique({
+    where: { id: groupId },
+    include: {
+      bookings: {
+        include: { object: { include: { objectType: { include: { category: true } } } } },
+        orderBy: { startAt: "asc" },
+      },
+    },
+  });
+}
+
+function groupItemLines(
+  bookings: {
+    publicCode: string;
+    startAt: Date;
+    endAt: Date;
+    guestsCount: number;
+    totalPrice: unknown;
+    object: { name: string; objectType: { category: { name: string } } };
+  }[],
+): string[] {
+  return bookings.map(
+    (b) =>
+      `• ${b.publicCode} — ${b.object.name} (${b.object.objectType.category.name}): ` +
+      `${formatLocal(b.startAt)} → ${formatLocal(b.endAt)}, ${b.guestsCount} гост., ${b.totalPrice} ₽`,
+  );
+}
+
+/** Админу — о новом групповом заказе (до оплаты). Одно агрегированное сообщение. */
+export async function sendNewBookingGroupNotifications(groupId: string) {
+  const g = await loadGroup(groupId);
+  if (!g) return;
+
+  const total = Number(g.totalPrice);
+  const prepay = Number(g.prepaymentAmount);
+  const remaining = Math.max(0, total - prepay);
+  const priceLines =
+    remaining > 0 && prepay > 0
+      ? [
+          `Полная стоимость: ${total} ₽`,
+          `Предоплата онлайн: ${prepay} ₽`,
+          `Остаток при заселении: ${remaining.toFixed(2)} ₽`,
+        ]
+      : [`Сумма: ${total} ₽`];
+  const text = [
+    `Новый заказ ${g.publicCode} (${g.bookings.length} объ.)`,
+    `Гость: ${g.guestName}, ${g.guestPhone}, ${g.guestEmail}`,
+    ``,
+    ...groupItemLines(g.bookings),
+    ``,
+    ...priceLines,
+    `Статус: ${g.status} (ожидает оплаты)`,
+  ].join("\n");
+
+  const admins = await getAdminEmails();
+  const firstBookingId = g.bookings[0]?.id;
+  await Promise.allSettled([
+    ...admins.map((to) =>
+      sendEmail({
+        to,
+        subject: `Новый заказ ${g.publicCode} (${g.bookings.length} объ.)`,
+        text,
+        bookingId: firstBookingId,
+        kind: "admin_new_group",
+      }),
+    ),
+    sendTelegram(text, firstBookingId, "admin_new_group"),
+    sendMax(text, firstBookingId, "admin_new_group"),
+  ]);
+}
+
+/** Клиенту + админу — об оплате группового заказа. */
+export async function sendPaidGroupNotifications(groupId: string) {
+  const g = await loadGroup(groupId);
+  if (!g) return;
+
+  const total = Number(g.totalPrice);
+  const prepay = Number(g.prepaymentAmount);
+  const remaining = Math.max(0, total - prepay);
+
+  const guestLines = [
+    `Здравствуйте, ${g.guestName}!`,
+    `Ваш заказ ${g.publicCode} оплачен и подтверждён.`,
+    ``,
+    ...groupItemLines(g.bookings),
+    ``,
+    `Полная стоимость: ${total} ₽`,
+  ];
+  if (remaining > 0 && prepay > 0) {
+    guestLines.push(
+      `Оплачено онлайн (предоплата): ${prepay} ₽`,
+      `Остаток к оплате на месте: ${remaining.toFixed(2)} ₽`,
+    );
+  } else {
+    guestLines.push(`Оплачено: ${prepay} ₽`);
+  }
+  guestLines.push(``, `До встречи!`);
+  const guestText = guestLines.join("\n");
+
+  const admins = await getAdminEmails();
+  const adminText = `Заказ ${g.publicCode} оплачен. ${g.guestName}, ${g.bookings.length} объ., ${prepay} ₽.`;
+  const firstBookingId = g.bookings[0]?.id;
+
+  await Promise.allSettled([
+    sendEmail({
+      to: g.guestEmail,
+      subject: `Заказ ${g.publicCode} подтверждён`,
+      text: guestText,
+      bookingId: firstBookingId,
+      kind: "guest_paid_group",
+    }),
+    ...admins.map((to) =>
+      sendEmail({
+        to,
+        subject: `Оплата по заказу ${g.publicCode}`,
+        text: adminText,
+        bookingId: firstBookingId,
+        kind: "admin_paid_group",
+      }),
+    ),
+    sendTelegram(adminText, firstBookingId, "admin_paid_group"),
+    sendMax(adminText, firstBookingId, "admin_paid_group"),
+  ]);
+}
+
 /**
  * Письмо клиенту о повторной попытке оплаты после отказа банка.
  * Идемпотентно: при повторном вызове письмо не отправится повторно

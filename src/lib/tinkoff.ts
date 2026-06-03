@@ -1,4 +1,5 @@
 import { createHash, createHmac } from "node:crypto";
+import { Prisma } from "@prisma/client";
 import { prisma } from "./db";
 import { env } from "./env";
 
@@ -159,6 +160,29 @@ function normalizePhone(raw: string): string {
   return `+${digits}`;
 }
 
+// Чек из произвольного списка позиций. Сумма позиций должна совпадать с Amount платежа.
+function makeReceipt(
+  lineItems: { name: string; amountKopecks: number }[],
+  email: string,
+  phone: string,
+): TinkoffReceipt {
+  const Items: TinkoffReceiptItem[] = lineItems.map((li) => ({
+    Name: li.name.slice(0, 128),
+    Price: li.amountKopecks,
+    Quantity: 1,
+    Amount: li.amountKopecks,
+    Tax: RECEIPT_TAX,
+    PaymentMethod: RECEIPT_PAYMENT_METHOD,
+    PaymentObject: RECEIPT_PAYMENT_OBJECT,
+  }));
+  const receipt: TinkoffReceipt = { Taxation: RECEIPT_TAXATION, Items };
+  const e = email.trim();
+  if (e) receipt.Email = e;
+  const p = normalizePhone(phone);
+  if (p) receipt.Phone = p;
+  return receipt;
+}
+
 function buildReceipt(
   booking: {
     guestEmail: string;
@@ -168,25 +192,11 @@ function buildReceipt(
   },
   amountKopecks: number,
 ): TinkoffReceipt {
-  const itemName = `Предоплата за бронь ${booking.publicCode} — ${booking.object.name}`.slice(0, 128);
-  const item: TinkoffReceiptItem = {
-    Name: itemName,
-    Price: amountKopecks,
-    Quantity: 1,
-    Amount: amountKopecks,
-    Tax: RECEIPT_TAX,
-    PaymentMethod: RECEIPT_PAYMENT_METHOD,
-    PaymentObject: RECEIPT_PAYMENT_OBJECT,
-  };
-  const receipt: TinkoffReceipt = {
-    Taxation: RECEIPT_TAXATION,
-    Items: [item],
-  };
-  const email = booking.guestEmail.trim();
-  if (email) receipt.Email = email;
-  const phone = normalizePhone(booking.guestPhone);
-  if (phone) receipt.Phone = phone;
-  return receipt;
+  return makeReceipt(
+    [{ name: `Предоплата за бронь ${booking.publicCode} — ${booking.object.name}`, amountKopecks }],
+    booking.guestEmail,
+    booking.guestPhone,
+  );
 }
 
 export async function initPayment(bookingId: string): Promise<{
@@ -282,6 +292,103 @@ export async function initPayment(bookingId: string): Promise<{
   return { confirmationUrl: data.PaymentURL, paymentId: data.PaymentId };
 }
 
+/**
+ * Инициализация платежа для группы броней (заказа). Сумма = prepaymentAmount
+ * группы (= сумма предоплат всех броней). Чек — по позиции на каждую бронь.
+ * Создаёт один Payment, привязанный к группе (а не к отдельной брони).
+ */
+export async function initGroupPayment(groupId: string): Promise<{
+  confirmationUrl: string;
+  paymentId: string;
+}> {
+  const group = await prisma.bookingGroup.findUnique({
+    where: { id: groupId },
+    include: { bookings: { include: { object: true } } },
+  });
+  if (!group) throw new Error("Заказ не найден");
+  const payAmount = group.prepaymentAmount;
+  const amountKopecks = Math.round(Number(payAmount) * 100);
+
+  const cfg = await getTinkoffConfig();
+
+  if (cfg.mode === "mock") {
+    const url = `/payments/mock?group=${groupId}&sig=${mockSign(groupId)}`;
+    const payment = await prisma.payment.upsert({
+      where: { groupId },
+      create: {
+        groupId,
+        provider: "tinkoff-mock",
+        amount: payAmount,
+        currency: "RUB",
+        status: "PENDING",
+        confirmationUrl: url,
+      },
+      update: { amount: payAmount, status: "PENDING", confirmationUrl: url },
+    });
+    return { confirmationUrl: payment.confirmationUrl!, paymentId: payment.id };
+  }
+
+  if (!cfg.terminalKey || !cfg.password) {
+    throw new Error(
+      `Tinkoff не настроен: задайте ${cfg.mode === "test" ? "тестовые" : "боевые"} TerminalKey и Password в админке`,
+    );
+  }
+
+  const orderId = `${group.publicCode}-${Date.now().toString(36)}`;
+  const params: Record<string, string | number> = {
+    TerminalKey: cfg.terminalKey,
+    Amount: amountKopecks,
+    OrderId: orderId,
+    Description: `Заказ ${group.publicCode} (предоплата, ${group.bookings.length} объ.)`,
+    SuccessURL: `${env.APP_URL}/booking/success?group=${group.publicCode}`,
+    FailURL: `${env.APP_URL}/booking/failed?group=${group.publicCode}`,
+    NotificationURL: `${env.APP_URL}/api/payments/tinkoff/webhook`,
+  };
+  const Token = signTinkoff(params, cfg.password);
+
+  // Позиция на каждую бронь; сумма позиций == amountKopecks (prepaymentAmount группы).
+  const Receipt = makeReceipt(
+    group.bookings.map((b) => ({
+      name: `Предоплата за бронь ${b.publicCode} — ${b.object.name}`,
+      amountKopecks: Math.round(Number(b.prepaymentAmount) * 100),
+    })),
+    group.guestEmail,
+    group.guestPhone,
+  );
+
+  const res = await fetch(`${cfg.apiUrl}/Init`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...params, Token, Receipt }),
+  });
+  const data = (await res.json()) as TinkoffInitResponse;
+
+  if (!data.Success || !data.PaymentURL || !data.PaymentId) {
+    throw new Error(`Tinkoff Init failed: ${data.Message || data.ErrorCode}`);
+  }
+
+  await prisma.payment.upsert({
+    where: { groupId },
+    create: {
+      groupId,
+      provider: cfg.mode === "test" ? "tinkoff-test" : "tinkoff",
+      externalId: data.PaymentId,
+      amount: payAmount,
+      currency: "RUB",
+      status: "PENDING",
+      confirmationUrl: data.PaymentURL,
+    },
+    update: {
+      externalId: data.PaymentId,
+      amount: payAmount,
+      confirmationUrl: data.PaymentURL,
+      status: "PENDING",
+    },
+  });
+
+  return { confirmationUrl: data.PaymentURL, paymentId: data.PaymentId };
+}
+
 export async function verifyTinkoffWebhook(
   payload: Record<string, unknown>,
 ): Promise<boolean> {
@@ -297,6 +404,45 @@ export async function verifyTinkoffWebhook(
   return expected === payload.Token;
 }
 
+// Помечает успешную оплату: payment=SUCCEEDED и все связанные брони PAID
+// (одиночную бронь ИЛИ всю группу — атомарно).
+async function settleSuccess(
+  payment: { id: string; bookingId: string | null; groupId: string | null },
+  rawPayload?: unknown,
+) {
+  const now = new Date();
+  const ops: Prisma.PrismaPromise<unknown>[] = [
+    prisma.payment.update({
+      where: { id: payment.id },
+      data: {
+        status: "SUCCEEDED",
+        paidAt: now,
+        ...(rawPayload !== undefined ? { rawPayload: rawPayload as object } : {}),
+      },
+    }),
+  ];
+  if (payment.groupId) {
+    ops.push(
+      prisma.bookingGroup.update({
+        where: { id: payment.groupId },
+        data: { status: "PAID", paidAt: now },
+      }),
+      prisma.booking.updateMany({
+        where: { groupId: payment.groupId, status: "PENDING" },
+        data: { status: "PAID", paidAt: now },
+      }),
+    );
+  } else if (payment.bookingId) {
+    ops.push(
+      prisma.booking.update({
+        where: { id: payment.bookingId },
+        data: { status: "PAID", paidAt: now },
+      }),
+    );
+  }
+  await prisma.$transaction(ops);
+}
+
 export async function applyPaymentResult(args: {
   externalId: string;
   succeeded: boolean;
@@ -304,31 +450,25 @@ export async function applyPaymentResult(args: {
 }) {
   const payment = await prisma.payment.findFirst({
     where: { externalId: args.externalId },
-    include: { booking: true },
   });
-  if (!payment) return;
+  if (!payment) return null;
 
   if (args.succeeded) {
-    await prisma.$transaction([
-      prisma.payment.update({
-        where: { id: payment.id },
-        data: {
-          status: "SUCCEEDED",
-          paidAt: new Date(),
-          rawPayload: args.rawPayload as object,
-        },
-      }),
-      prisma.booking.update({
-        where: { id: payment.bookingId },
-        data: { status: "PAID", paidAt: new Date() },
-      }),
-    ]);
+    await settleSuccess(payment, args.rawPayload);
   } else {
+    // Неуспех по вебхуку: помечаем только платёж (бронь остаётся PENDING — клиент
+    // может повторить оплату до истечения срока).
     await prisma.payment.update({
       where: { id: payment.id },
       data: { status: "FAILED", rawPayload: args.rawPayload as object },
     });
   }
+  // Возвращаем привязку платежа, чтобы вызывающий мог разослать уведомления.
+  return {
+    bookingId: payment.bookingId,
+    groupId: payment.groupId,
+    succeeded: args.succeeded,
+  };
 }
 
 interface TinkoffCancelResponse {
@@ -461,20 +601,11 @@ export async function applyMockPayment(bookingId: string, succeeded: boolean) {
     where: { bookingId },
     include: { booking: true },
   });
-  if (!payment) throw new Error("Платёж не найден");
+  if (!payment || !payment.booking) throw new Error("Платёж не найден");
   if (payment.booking.status !== "PENDING") return;
 
   if (succeeded) {
-    await prisma.$transaction([
-      prisma.payment.update({
-        where: { id: payment.id },
-        data: { status: "SUCCEEDED", paidAt: new Date() },
-      }),
-      prisma.booking.update({
-        where: { id: bookingId },
-        data: { status: "PAID", paidAt: new Date() },
-      }),
-    ]);
+    await settleSuccess(payment);
   } else {
     await prisma.$transaction([
       prisma.payment.update({
@@ -488,6 +619,34 @@ export async function applyMockPayment(bookingId: string, succeeded: boolean) {
           cancelReason: "Отказ от оплаты (mock)",
           cancelledAt: new Date(),
         },
+      }),
+    ]);
+  }
+}
+
+// Mock-подтверждение оплаты для группы: успех → вся группа PAID;
+// отказ → платёж CANCELED, все брони и группа CANCELLED.
+export async function applyMockPaymentForGroup(groupId: string, succeeded: boolean) {
+  const payment = await prisma.payment.findUnique({
+    where: { groupId },
+    include: { group: true },
+  });
+  if (!payment || !payment.group) throw new Error("Платёж не найден");
+  if (payment.group.status !== "PENDING") return;
+
+  if (succeeded) {
+    await settleSuccess(payment);
+  } else {
+    const now = new Date();
+    await prisma.$transaction([
+      prisma.payment.update({ where: { id: payment.id }, data: { status: "CANCELED" } }),
+      prisma.bookingGroup.update({
+        where: { id: groupId },
+        data: { status: "CANCELLED", cancelledAt: now },
+      }),
+      prisma.booking.updateMany({
+        where: { groupId, status: "PENDING" },
+        data: { status: "CANCELLED", cancelReason: "Отказ от оплаты (mock)", cancelledAt: now },
       }),
     ]);
   }

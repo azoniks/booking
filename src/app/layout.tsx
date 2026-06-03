@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
+import { CartProvider } from "@/components/client/CartProvider";
 import { prisma } from "@/lib/db";
 
 export const viewport: Viewport = {
@@ -42,7 +43,7 @@ export default function RootLayout({
   return (
     <html lang="ru">
       <body className="min-h-screen bg-background text-foreground antialiased">
-        {children}
+        <CartProvider>{children}</CartProvider>
         <Toaster />
       </body>
     </html>

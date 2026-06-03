@@ -211,6 +211,28 @@ export const publicBookingSchema = z
     guestComment: z.string().max(1000).optional(),
   });
 
+// Групповая (мульти-объектная) бронь: один блок гостя + массив позиций,
+// у каждой свои параметры расписания и число гостей.
+const bookingGroupItemSchema = z.object({
+  objectId: z.string().min(1),
+  checkInDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  checkOutDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  startAt: z.string().datetime().optional(),
+  endAt: z.string().datetime().optional(),
+  slotId: z.string().min(1).optional(),
+  slotDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  bookingDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  guestsCount: z.coerce.number().int().min(1).max(50),
+});
+
+export const publicBookingGroupSchema = z.object({
+  guestName: z.string().min(2).max(100),
+  guestEmail: z.string().email(),
+  guestPhone: z.string().min(5).max(30),
+  guestComment: z.string().max(1000).optional(),
+  items: z.array(bookingGroupItemSchema).min(1).max(20),
+});
+
 // Админская ручная бронь: email/телефон необязательны (можно вписать «-»),
 // markAsPaid=true сразу выставляет PAID и пропускает Tinkoff.
 export const adminBookingSchema = z.object({

@@ -9,6 +9,7 @@ function MockPayInner() {
   const params = useSearchParams();
   const router = useRouter();
   const bookingId = params.get("bookingId") || "";
+  const groupId = params.get("group") || "";
   const sig = params.get("sig") || "";
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -20,19 +21,20 @@ function MockPayInner() {
       const res = await fetch("/api/payments/mock-confirm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bookingId, sig, succeeded }),
+        body: JSON.stringify(
+          groupId ? { groupId, sig, succeeded } : { bookingId, sig, succeeded },
+        ),
       });
       const j = await res.json();
       if (!j.ok) {
         setError(j.error || "Ошибка");
         return;
       }
+      // Группа → success/failed?group=<code>; одиночная → ?code=<code>
+      const groupCode = j.data?.groupCode || "";
       const code = j.data?.publicCode || "";
-      if (succeeded) {
-        router.push(`/booking/success${code ? `?code=${code}` : ""}`);
-      } else {
-        router.push(`/booking/failed${code ? `?code=${code}` : ""}`);
-      }
+      const query = groupCode ? `?group=${groupCode}` : code ? `?code=${code}` : "";
+      router.push(`/booking/${succeeded ? "success" : "failed"}${query}`);
     } finally {
       setBusy(false);
     }

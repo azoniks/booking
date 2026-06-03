@@ -206,6 +206,10 @@ model Booking {
   // chat_id клиента в мессенджере (заполняется когда он жмёт /start у бота)
   telegramChatId  String?
   maxChatId       String?
+  // Групповая бронь (заказ из нескольких объектов с одним платежом).
+  // null → одиночная бронь (legacy / обычный поток).
+  groupId         String?
+  group           BookingGroup?     @relation(fields: [groupId], references: [id], onDelete: Restrict)
   payment         Payment?
   notifications   NotificationLog[]
   createdAt       DateTime          @default(now())
@@ -216,6 +220,32 @@ model Booking {
   @@index([objectId, startAt, blockedUntil])
   @@index([status])
   @@index([startAt])
+  @@index([groupId])
+}
+
+// === Групповая бронь (заказ нескольких объектов, оплачиваемый одним платежом) ===
+// Брони группы остаются самостоятельными записями (Booking) — у каждой свои
+// время/цена/предоплата. Группа хранит сводные суммы и единый статус, к ней
+// привязан один Payment. Гостевые поля дублируются на бронях (как в одиночном
+// потоке) и хранятся на группе для отображения/уведомлений.
+model BookingGroup {
+  id               String         @id @default(cuid())
+  publicCode       String         @unique
+  guestName        String
+  guestEmail       String
+  guestPhone       String
+  guestComment     String?
+  totalPrice       Decimal        @db.Decimal(10, 2)
+  prepaymentAmount Decimal        @db.Decimal(10, 2)
+  status           BookingStatus  @default(PENDING)
+  bookings         Booking[]
+  payment          Payment?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  paidAt           DateTime?
+  cancelledAt      DateTime?
+
+  @@index([status])
 }
 
 enum BookingStatus {
@@ -229,8 +259,12 @@ enum BookingStatus {
 // === Платёж ===
 model Payment {
   id              String        @id @default(cuid())
-  bookingId       String        @unique
-  booking         Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  // Платёж привязан строго к одному из: одиночной брони ИЛИ группе броней.
+  // Гарантируется на уровне приложения.
+  bookingId       String?       @unique
+  booking         Booking?      @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  groupId         String?       @unique
+  group           BookingGroup? @relation(fields: [groupId], references: [id], onDelete: Cascade)
   provider        String
   externalId      String?
   amount          Decimal       @db.Decimal(10, 2)

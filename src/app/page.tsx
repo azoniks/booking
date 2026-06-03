@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { CategoryTabs } from "@/components/client/CategoryTabs";
+import { CartBadge } from "@/components/client/CartBadge";
 import { InstallAppHint } from "@/components/client/InstallAppHint";
 import { slotDurationHours } from "@/lib/slots";
 
@@ -65,6 +66,7 @@ export default async function HomePage({
                 {siteContact}
               </a>
             )}
+            <CartBadge />
             <InstallAppHint siteName={siteName} />
             {mainSiteUrl && (
               <a

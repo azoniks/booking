@@ -5,13 +5,22 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function generatePublicCode(): string {
+function randomCode(len = 6): string {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let s = "";
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < len; i++) {
     s += alphabet[Math.floor(Math.random() * alphabet.length)];
   }
-  return `B-${s}`;
+  return s;
+}
+
+export function generatePublicCode(): string {
+  return `B-${randomCode()}`;
+}
+
+// Код заказа (группы броней). Префикс G- отличает его от одиночной брони (B-).
+export function generateGroupCode(): string {
+  return `G-${randomCode()}`;
 }
 
 export function formatRub(value: number | string): string {

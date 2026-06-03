@@ -21,9 +21,66 @@ const reasonMessage: Record<Exclude<Reason, undefined>, string> = {
 export default async function FailedPage({
   searchParams,
 }: {
-  searchParams: Promise<{ code?: string; reason?: Reason }>;
+  searchParams: Promise<{ code?: string; group?: string; reason?: Reason }>;
 }) {
-  const { code, reason } = await searchParams;
+  const { code, group, reason } = await searchParams;
+
+  // Групповой заказ
+  if (group) {
+    const grp = await prisma.bookingGroup.findUnique({
+      where: { publicCode: group },
+      select: { publicCode: true, status: true, createdAt: true },
+    });
+    const elapsed = grp ? (Date.now() - grp.createdAt.getTime()) / 60_000 : 0;
+    const remaining = grp ? Math.max(0, Math.ceil(env.PAYMENT_TIMEOUT_MINUTES - elapsed)) : 0;
+    const canRetry = grp != null && grp.status === "PENDING" && remaining > 0;
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4 bg-slate-50">
+        <Card className="max-w-lg w-full">
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <XCircle className="w-8 h-8 text-destructive" />
+              <CardTitle>Оплата не прошла</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {reason && reasonMessage[reason] && (
+              <p className="text-sm text-destructive">{reasonMessage[reason]}</p>
+            )}
+            {grp ? (
+              <>
+                <p className="text-sm text-muted-foreground">
+                  Заказ <span className="font-mono text-foreground">{grp.publicCode}</span> не подтверждён.
+                </p>
+                {canRetry && (
+                  <>
+                    <div className="flex items-start gap-2 text-sm text-muted-foreground rounded-md border bg-amber-50/60 border-amber-200 p-3">
+                      <Clock className="w-4 h-4 mt-0.5 shrink-0 text-amber-600" />
+                      <span>Заказ будет автоматически отменён через <b>~{remaining} мин.</b>, если оплата не поступит.</span>
+                    </div>
+                    <Button asChild className="w-full">
+                      <Link href={`/booking/retry?group=${grp.publicCode}`}>
+                        <RefreshCcw className="w-4 h-4 mr-2" />
+                        Попробовать ещё раз
+                      </Link>
+                    </Button>
+                  </>
+                )}
+                {grp.status === "CANCELLED" && (
+                  <p className="text-sm text-muted-foreground">Заказ был отменён.</p>
+                )}
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">Заказ с таким кодом не найден.</p>
+            )}
+            <Button asChild variant="outline" className="w-full">
+              <Link href="/">На главную</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const booking = code
     ? await prisma.booking.findUnique({

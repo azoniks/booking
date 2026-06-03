@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState, useMemo } from "react";
+import Link from "next/link";
 import type { DateRange } from "react-day-picker";
-import { Info } from "lucide-react";
+import { Info, ShoppingCart, Check } from "lucide-react";
+import { useCart } from "./CartProvider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -563,6 +565,29 @@ export function BookingForm({ object }: { object: ObjectInfo }) {
     }
   }
 
+  const { add: addToCart, has: inCart } = useCart();
+  const [addedToCart, setAddedToCart] = useState(false);
+
+  // Сериализуем текущий выбор для корзины (без гостевых данных).
+  function buildSchedule() {
+    const base = { guestsCount: guests };
+    if (isFullDay) return { ...base, bookingDate: isoDate(fullDayDate!) };
+    if (isDaily) return { ...base, checkInDate: isoDate(range!.from!), checkOutDate: isoDate(range!.to!) };
+    if (useSlots) return { ...base, slotId: slotId!, slotDate: isoDate(slotDate!) };
+    return {
+      ...base,
+      startAt: hourlySlots[startIdx!].date.toISOString(),
+      endAt: hourlySlots[endIdx!].date.toISOString(),
+    };
+  }
+
+  function handleAddToCart() {
+    addToCart({ id: object.id, name: object.name, schedule: canSubmit ? buildSchedule() : undefined });
+    setAddedToCart(true);
+  }
+
+  const showInCart = addedToCart || inCart(object.id);
+
   return (
     <Card>
       <CardHeader>
@@ -878,6 +903,37 @@ export function BookingForm({ object }: { object: ObjectInfo }) {
                 </div>
               );
             })()}
+          </div>
+
+          {/* Несколько объектов — добавить в корзину и оформить одним заказом */}
+          <div className="border-t pt-4 space-y-2">
+            {showInCart ? (
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                <span className="inline-flex items-center text-sm text-emerald-700">
+                  <Check className="w-4 h-4 mr-1" /> Добавлено в корзину
+                </span>
+                <Button asChild variant="outline" size="sm" className="sm:ml-auto">
+                  <Link href="/booking/cart">Перейти в корзину</Link>
+                </Button>
+              </div>
+            ) : (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  disabled={!canSubmit}
+                  onClick={handleAddToCart}
+                >
+                  <ShoppingCart className="w-4 h-4 mr-2" />
+                  Добавить в корзину
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  Хотите забронировать несколько объектов? Выберите даты и добавьте в
+                  корзину — оформите всё одним заказом и оплатите вместе.
+                </p>
+              </>
+            )}
           </div>
         </form>
       </CardContent>

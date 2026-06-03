@@ -1,7 +1,7 @@
 import { prisma } from "./db";
 import { findConflicts } from "./availability";
 import { calcPrice } from "./pricing";
-import { generatePublicCode } from "./utils";
+import { generatePublicCode, generateGroupCode } from "./utils";
 import { localDateTimeToUtc } from "./time";
 import { addDaysISO } from "./slots";
 import { env } from "./env";
@@ -21,7 +21,16 @@ export class ObjectNotAvailableError extends Error {
   }
 }
 
-export interface CreateBookingArgs {
+// Гостевые данные, общие для одиночной брони и для всех броней группы.
+export interface GuestInfo {
+  guestName: string;
+  guestEmail: string;
+  guestPhone: string;
+  guestComment?: string;
+}
+
+// Параметры расписания одной брони (без гостевых данных) — для элемента группы.
+export interface BookingScheduleArgs {
   objectId: string;
   // Для DAILY: даты в формате YYYY-MM-DD (заезд/выезд). Для HOURLY игнорируется.
   checkInDate?: string;
@@ -35,11 +44,9 @@ export interface CreateBookingArgs {
   // Для FULL_DAY: одна дата YYYY-MM-DD, бронь на весь рабочий день типа.
   bookingDate?: string;
   guestsCount: number;
-  guestName: string;
-  guestEmail: string;
-  guestPhone: string;
-  guestComment?: string;
 }
+
+export interface CreateBookingArgs extends BookingScheduleArgs, GuestInfo {}
 
 /**
  * Сколько секций нужно для N гостей. null → не секционный тип.
@@ -64,13 +71,36 @@ export function calcSectionsNeeded(
   return needed > max ? t.sectionsTotal : needed;
 }
 
-export async function createBooking(args: CreateBookingArgs) {
-  const obj = await prisma.bookingObject.findUnique({
-    where: { id: args.objectId },
+async function loadObjectForBooking(objectId: string) {
+  return prisma.bookingObject.findUnique({
+    where: { id: objectId },
     include: {
       objectType: { include: { category: true, slots: true } },
     },
   });
+}
+
+type LoadedObject = NonNullable<Awaited<ReturnType<typeof loadObjectForBooking>>>;
+
+type PreparedBooking = {
+  obj: LoadedObject;
+  startAt: Date;
+  endAt: Date;
+  blockedUntil: Date;
+  pricing: ReturnType<typeof calcPrice>;
+  prepay: Awaited<ReturnType<typeof resolvePrepayment>>;
+  sectionsNeeded: number | null;
+  guestsCount: number;
+};
+
+/**
+ * Подготовка брони: загрузка объекта/типа, резолв времени по режиму,
+ * секционная логика, расчёт цены и предоплаты. Read-only — БЕЗ транзакции,
+ * чтобы для группы выполнить тяжёлые расчёты до открытия Serializable-транзакции.
+ * Проверка конфликтов делается отдельно — в assertAvailable внутри транзакции.
+ */
+async function prepareBooking(args: BookingScheduleArgs): Promise<PreparedBooking> {
+  const obj = await loadObjectForBooking(args.objectId);
 
   if (!obj) throw new ObjectNotAvailableError("Объект не найден");
   if (obj.status !== "ACTIVE")
@@ -192,68 +222,157 @@ export async function createBooking(args: CreateBookingArgs) {
     },
     pricing.totalPrice,
   );
-  const { prepaymentAmount, paymentPercent, paymentType } = prepay;
 
-  // Транзакция Serializable: повторно проверяем пересечения внутри
-  // и создаём бронь атомарно.
-  const booking = await prisma.$transaction(
+  return {
+    obj,
+    startAt,
+    endAt,
+    blockedUntil,
+    pricing,
+    prepay,
+    sectionsNeeded,
+    guestsCount: args.guestsCount,
+  };
+}
+
+/**
+ * Проверка доступности подготовленной брони ВНУТРИ транзакции.
+ * Бросает BookingConflictError при пересечении с бронью/блокировкой.
+ * Можно вызывать несколько раз в одной транзакции (для группы) — уже созданные
+ * в этой же транзакции брони видны последующим проверкам.
+ */
+async function assertAvailable(tx: Prisma.TransactionClient, p: PreparedBooking) {
+  const t = p.obj.objectType;
+  const conflicts = await findConflicts(tx, {
+    objectId: p.obj.id,
+    startAt: p.startAt,
+    endAt: p.endAt,
+    cleaningMinutes: t.cleaningMinutes,
+  });
+  if (conflicts.blocks.length > 0) throw new BookingConflictError();
+
+  if (p.sectionsNeeded === null) {
+    // Несекционный тип — любое пересечение = конфликт.
+    if (conflicts.bookings.length > 0) throw new BookingConflictError();
+  } else {
+    // Секционный тип: считаем занятость по секциям.
+    // sectionsBooked === null трактуется как «весь объект» (legacy).
+    const sectionsTotal = t.sectionsTotal!;
+    const wantFullVenue = p.sectionsNeeded === sectionsTotal;
+    const usedByOthers = conflicts.bookings.reduce(
+      (sum, b) => sum + (b.sectionsBooked ?? sectionsTotal),
+      0,
+    );
+    if (wantFullVenue && conflicts.bookings.length > 0) {
+      throw new BookingConflictError();
+    }
+    if (usedByOthers + p.sectionsNeeded > sectionsTotal) {
+      throw new BookingConflictError();
+    }
+  }
+}
+
+/** Данные для tx.booking.create из подготовленной брони + гостя (+ группа). */
+function buildBookingCreateData(
+  p: PreparedBooking,
+  guest: GuestInfo,
+  groupId?: string,
+): Prisma.BookingUncheckedCreateInput {
+  return {
+    publicCode: generatePublicCode(),
+    objectId: p.obj.id,
+    guestName: guest.guestName.trim(),
+    guestEmail: guest.guestEmail.trim().toLowerCase(),
+    guestPhone: guest.guestPhone.trim(),
+    guestComment: guest.guestComment?.trim() || null,
+    startAt: p.startAt,
+    endAt: p.endAt,
+    blockedUntil: p.blockedUntil,
+    guestsCount: p.guestsCount,
+    extraGuests: p.pricing.extraGuests,
+    basePrice: p.pricing.basePriceTotal,
+    extraGuestsCost: p.pricing.extraGuestsCost,
+    totalPrice: p.pricing.totalPrice,
+    paymentPercent: p.prepay.paymentPercent,
+    prepaymentAmount: p.prepay.prepaymentAmount,
+    paymentType: p.prepay.paymentType,
+    sectionsBooked: p.sectionsNeeded,
+    status: "PENDING",
+    ...(groupId ? { groupId } : {}),
+  };
+}
+
+export async function createBooking(args: CreateBookingArgs) {
+  const prepared = await prepareBooking(args);
+  const guest: GuestInfo = {
+    guestName: args.guestName,
+    guestEmail: args.guestEmail,
+    guestPhone: args.guestPhone,
+    guestComment: args.guestComment,
+  };
+  // Транзакция Serializable: повторно проверяем пересечения и создаём атомарно.
+  return prisma.$transaction(
     async (tx) => {
-      const conflicts = await findConflicts(tx, {
-        objectId: obj.id,
-        startAt,
-        endAt,
-        cleaningMinutes: t.cleaningMinutes,
-      });
-      if (conflicts.blocks.length > 0) throw new BookingConflictError();
+      await assertAvailable(tx, prepared);
+      return tx.booking.create({ data: buildBookingCreateData(prepared, guest) });
+    },
+    { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+  );
+}
 
-      if (sectionsNeeded === null) {
-        // Несекционный тип — любое пересечение = конфликт.
-        if (conflicts.bookings.length > 0) throw new BookingConflictError();
-      } else {
-        // Секционный тип: считаем занятость по секциям.
-        // sectionsBooked === null трактуется как «весь объект» (legacy).
-        const sectionsTotal = t.sectionsTotal!;
-        const wantFullVenue = sectionsNeeded === sectionsTotal;
-        const usedByOthers = conflicts.bookings.reduce(
-          (sum, b) => sum + (b.sectionsBooked ?? sectionsTotal),
-          0,
-        );
-        if (wantFullVenue && conflicts.bookings.length > 0) {
-          throw new BookingConflictError();
-        }
-        if (usedByOthers + sectionsNeeded > sectionsTotal) {
-          throw new BookingConflictError();
-        }
-      }
+/**
+ * Групповая бронь: несколько объектов в одном заказе с единым платежом.
+ * Гостевые данные общие. Цена/предоплата группы — сумма по всем броням
+ * (правила оплаты у разных типов разные, поэтому считаем per-booking).
+ * Вся группа создаётся атомарно: при конфликте по любому объекту — откат.
+ */
+export async function createBookingGroup(
+  items: BookingScheduleArgs[],
+  guest: GuestInfo,
+) {
+  if (items.length === 0) throw new Error("Не выбран ни один объект");
 
-      return tx.booking.create({
+  // Тяжёлые расчёты (загрузка, цена, предоплата) — до транзакции.
+  const prepared = await Promise.all(items.map((a) => prepareBooking(a)));
+
+  const totalPrice = prepared.reduce(
+    (s, p) => s.add(p.pricing.totalPrice),
+    new Prisma.Decimal(0),
+  );
+  const prepaymentAmount = prepared.reduce(
+    (s, p) => s.add(p.prepay.prepaymentAmount),
+    new Prisma.Decimal(0),
+  );
+
+  return prisma.$transaction(
+    async (tx) => {
+      const group = await tx.bookingGroup.create({
         data: {
-          publicCode: generatePublicCode(),
-          objectId: obj.id,
-          guestName: args.guestName.trim(),
-          guestEmail: args.guestEmail.trim().toLowerCase(),
-          guestPhone: args.guestPhone.trim(),
-          guestComment: args.guestComment?.trim() || null,
-          startAt,
-          endAt,
-          blockedUntil,
-          guestsCount: args.guestsCount,
-          extraGuests: pricing.extraGuests,
-          basePrice: pricing.basePriceTotal,
-          extraGuestsCost: pricing.extraGuestsCost,
-          totalPrice: pricing.totalPrice,
-          paymentPercent,
+          publicCode: generateGroupCode(),
+          guestName: guest.guestName.trim(),
+          guestEmail: guest.guestEmail.trim().toLowerCase(),
+          guestPhone: guest.guestPhone.trim(),
+          guestComment: guest.guestComment?.trim() || null,
+          totalPrice,
           prepaymentAmount,
-          paymentType,
-          sectionsBooked: sectionsNeeded,
           status: "PENDING",
         },
+      });
+
+      // Проверяем доступность и создаём по очереди: уже созданная в этой же
+      // транзакции бронь видна следующим проверкам (защита от дублей внутри заказа).
+      for (const p of prepared) {
+        await assertAvailable(tx, p);
+        await tx.booking.create({ data: buildBookingCreateData(p, guest, group.id) });
+      }
+
+      return tx.bookingGroup.findUniqueOrThrow({
+        where: { id: group.id },
+        include: { bookings: true },
       });
     },
     { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
   );
-
-  return booking;
 }
 
 /**

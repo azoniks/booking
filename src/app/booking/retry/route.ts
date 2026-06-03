@@ -1,13 +1,13 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
-import { initPayment } from "@/lib/tinkoff";
+import { initPayment, initGroupPayment } from "@/lib/tinkoff";
 import { env } from "@/lib/env";
 
 /**
- * GET /booking/retry?code=PUBLIC_CODE
+ * GET /booking/retry?code=PUBLIC_CODE  (или ?group=GROUP_CODE)
  *
- * Перегенерирует Tinkoff-платёж для PENDING-брони и редиректит пользователя
- * на свежую форму оплаты. Используется со страницы /booking/failed и из писем.
+ * Перегенерирует Tinkoff-платёж для PENDING-брони/заказа и редиректит на свежую
+ * форму оплаты. Используется со страницы /booking/failed и из писем.
  *
  * Tinkoff требует уникальный OrderId на каждый Init, поэтому initPayment()
  * автоматически добавляет суффикс к publicCode.
@@ -15,6 +15,35 @@ import { env } from "@/lib/env";
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const code = url.searchParams.get("code");
+  const groupCode = url.searchParams.get("group");
+
+  // Групповой заказ
+  if (groupCode) {
+    const groupFallback = (reason?: string) => {
+      const target = new URL(`${env.APP_URL}/booking/failed`);
+      target.searchParams.set("group", groupCode);
+      if (reason) target.searchParams.set("reason", reason);
+      return Response.redirect(target.toString(), 307);
+    };
+    const grp = await prisma.bookingGroup.findUnique({
+      where: { publicCode: groupCode },
+      select: { id: true, status: true, createdAt: true },
+    });
+    if (!grp) return groupFallback("not_found");
+    if (grp.status === "PAID") {
+      return Response.redirect(`${env.APP_URL}/booking/success?group=${groupCode}`, 307);
+    }
+    if (grp.status !== "PENDING") return groupFallback("not_pending");
+    const ageMinG = (Date.now() - grp.createdAt.getTime()) / 60_000;
+    if (ageMinG > env.PAYMENT_TIMEOUT_MINUTES) return groupFallback("expired");
+    try {
+      const payment = await initGroupPayment(grp.id);
+      return Response.redirect(payment.confirmationUrl, 307);
+    } catch (e) {
+      console.error("[booking/retry group] initGroupPayment failed:", e);
+      return groupFallback("init_failed");
+    }
+  }
 
   const fallback = (reason?: string) => {
     const target = new URL(`${env.APP_URL}/booking/failed`);
