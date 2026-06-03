@@ -23,7 +23,9 @@ export default async function HomePage({
             media: { orderBy: [{ isMain: "desc" }, { sortOrder: "asc" }] },
             slots: { select: { id: true, priceOverride: true, startTime: true, endTime: true, endDayOffset: true } },
             objects: {
-              where: { status: "ACTIVE" },
+              // Аддоны (трейлеры) не показываем как самостоятельные объекты —
+              // они доступны только из карточки родителя.
+              where: { status: "ACTIVE", isAddon: false },
               orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
               include: {
                 media: { orderBy: [{ isMain: "desc" }, { sortOrder: "asc" }] },

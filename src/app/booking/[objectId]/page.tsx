@@ -21,6 +21,16 @@ export default async function BookingPage({ params }: { params: Promise<{ object
         },
       },
       media: { orderBy: [{ isMain: "desc" }, { sortOrder: "asc" }] },
+      // Аддоны, которые можно добавить к броне этого объекта (напр. трейлер к мостику).
+      addons: {
+        where: { status: "ACTIVE" },
+        include: {
+          objectType: { select: { basePrice: true } },
+          media: { where: { isMain: true }, take: 1 },
+        },
+      },
+      // Родительские объекты, для которых этот объект является аддоном.
+      addonOf: { select: { id: true } },
     },
   });
   if (!obj || obj.status !== "ACTIVE") notFound();
@@ -179,6 +189,14 @@ export default async function BookingPage({ params }: { params: Promise<{ object
                       }
                     : null,
               }}
+              isAddon={obj.isAddon}
+              parentIds={obj.addonOf.map((p) => p.id)}
+              addons={obj.addons.map((a) => ({
+                id: a.id,
+                name: a.name,
+                basePrice: Number(a.objectType.basePrice),
+                imageUrl: a.media[0]?.url ?? null,
+              }))}
             />
           </div>
         </div>

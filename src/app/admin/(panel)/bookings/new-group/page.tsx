@@ -8,7 +8,10 @@ export default async function NewGroupPage() {
   const objects = await prisma.bookingObject.findMany({
     where: { status: "ACTIVE" },
     orderBy: [{ name: "asc" }],
-    include: { objectType: { include: { category: true } } },
+    include: {
+      objectType: { include: { category: true } },
+      addons: { where: { status: "ACTIVE" }, select: { id: true, name: true } },
+    },
   });
 
   const formObjects = objects.map((o) => ({
@@ -16,6 +19,8 @@ export default async function NewGroupPage() {
     name: o.name,
     categoryName: o.objectType.category.name,
     typeName: o.objectType.name,
+    isAddon: o.isAddon,
+    addons: o.addons.map((a) => ({ id: a.id, name: a.name })),
   }));
 
   return (

@@ -27,6 +27,8 @@ export async function GET(req: NextRequest) {
             slots: { orderBy: [{ sortOrder: "asc" }, { startTime: "asc" }] },
           },
         },
+        // Родители, с которыми бронируется этот объект-аддон (для подсказки в корзине).
+        addonOf: { where: { status: "ACTIVE" }, select: { id: true, name: true } },
       },
     });
     if (!obj || obj.status !== "ACTIVE") return fail("Объект недоступен", 404);
@@ -145,6 +147,8 @@ export async function GET(req: NextRequest) {
       paymentPercent,
       paymentType,
       paymentAmount,
+      isAddon: obj.isAddon,
+      parents: obj.addonOf.map((p) => ({ id: p.id, name: p.name })),
       sections: sectionsConfig,
       daysOccupancy: sectionsConfig ? daysOccupancy : [],
       slots: t.slots.map((s) => ({

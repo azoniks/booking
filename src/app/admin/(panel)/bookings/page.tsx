@@ -35,7 +35,8 @@ export default async function BookingsPage({
       },
     }),
     prisma.bookingObject.findMany({
-      where: { status: "ACTIVE" },
+      // Аддоны не выбираются как основной объект — только как сопутствующие.
+      where: { status: "ACTIVE", isAddon: false },
       orderBy: [{ name: "asc" }],
       include: {
         objectType: {
@@ -44,6 +45,7 @@ export default async function BookingsPage({
             slots: { orderBy: [{ sortOrder: "asc" }, { startTime: "asc" }] },
           },
         },
+        addons: { where: { status: "ACTIVE" }, select: { id: true, name: true } },
       },
     }),
     prisma.category.findMany({
@@ -68,6 +70,7 @@ export default async function BookingsPage({
       endTime: s.endTime,
       endDayOffset: s.endDayOffset,
     })),
+    addons: o.addons.map((a) => ({ id: a.id, name: a.name })),
   }));
 
   const statusTabs = [

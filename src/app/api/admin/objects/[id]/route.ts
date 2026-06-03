@@ -22,13 +22,20 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!(await requireAdmin())) return unauth();
   try {
     const { id } = await params;
-    const body = objectUpdateSchema.parse(await req.json());
+    const { addonIds, ...body } = objectUpdateSchema.parse(await req.json());
     if (typeof body.description === "string") {
       body.description = isEmptyRichText(body.description)
         ? null
         : sanitizeRichText(body.description);
     }
-    const updated = await prisma.bookingObject.update({ where: { id }, data: body });
+    const updated = await prisma.bookingObject.update({
+      where: { id },
+      data: {
+        ...body,
+        // addonIds приходит только когда форма им управляет — иначе связь не трогаем.
+        ...(addonIds ? { addons: { set: addonIds.map((aid) => ({ id: aid })) } } : {}),
+      },
+    });
     return ok(updated);
   } catch (e) {
     return handleError(e);

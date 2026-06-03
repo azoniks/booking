@@ -136,6 +136,12 @@ model BookingObject {
   slug         String        @unique
   description  String?
   status       ObjectStatus  @default(ACTIVE)
+  // Объект-аддон (напр. трейлер): скрыт из листинга, бронируется только в составе
+  // заказа вместе с родительским объектом, который предлагает его в addons.
+  isAddon      Boolean       @default(false)
+  // Объекты, которые этот объект предлагает добавить при броне (self-relation M2M).
+  addons       BookingObject[] @relation("ObjectAddons")
+  addonOf      BookingObject[] @relation("ObjectAddons")
   sortOrder    Int           @default(0)
   media        ObjectMedia[]
   bookings     Booking[]

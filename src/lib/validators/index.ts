@@ -132,6 +132,10 @@ export const objectCreateSchema = z.object({
   description: z.string().max(10000).optional().nullable(),
   status: ObjectStatusEnum.default("ACTIVE"),
   sortOrder: z.coerce.number().int().default(0),
+  // Объект-аддон (бронируется только с родителем).
+  isAddon: z.boolean().optional(),
+  // id объектов-аддонов, предлагаемых при броне этого объекта (relation set).
+  addonIds: z.array(z.string()).optional(),
 });
 export const objectUpdateSchema = objectCreateSchema.partial();
 

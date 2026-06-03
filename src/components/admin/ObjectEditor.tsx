@@ -24,6 +24,7 @@ type Media = {
 export function ObjectEditor({
   obj,
   types,
+  addonCandidates,
 }: {
   obj: {
     id: string;
@@ -31,13 +32,16 @@ export function ObjectEditor({
     slug: string;
     description: string | null;
     status: string;
+    isAddon: boolean;
     sortOrder: number;
     objectTypeId: string;
     categoryName: string;
     typeName: string;
+    addonIds: string[];
     media: Media[];
   };
   types: { id: string; name: string; categoryName: string }[];
+  addonCandidates: { id: string; name: string; categoryName: string }[];
 }) {
   const router = useRouter();
   const fileInput = useRef<HTMLInputElement>(null);
@@ -56,6 +60,8 @@ export function ObjectEditor({
         status: fd.get("status"),
         sortOrder: Number(fd.get("sortOrder") || 0),
         objectTypeId: fd.get("objectTypeId"),
+        isAddon: fd.get("isAddon") === "on",
+        addonIds: fd.getAll("addonIds").map(String),
       }),
     });
     const j = await res.json();
@@ -190,6 +196,49 @@ export function ObjectEditor({
                 onChange={formProps.onChange}
               />
             </div>
+            <div className="md:col-span-3 flex items-center gap-2 border-t pt-3">
+              <input
+                type="checkbox"
+                name="isAddon"
+                id="isAddon"
+                defaultChecked={obj.isAddon}
+                onChange={formProps.onChange}
+              />
+              <Label htmlFor="isAddon" className="font-normal">
+                Это дополнение — бронируется только вместе с основным объектом (скрыт из общего
+                списка, нельзя забронировать отдельно). Например: трейлер.
+              </Label>
+            </div>
+
+            <div className="md:col-span-3">
+              <Label>Предлагать как дополнение при броне этого объекта</Label>
+              <p className="text-xs text-muted-foreground mb-2">
+                Отметьте объекты-дополнения, которые клиент сможет добавить, когда бронирует
+                <b> этот</b> объект. Настраивается у основного объекта (например, у мостика
+                отмечаете трейлер) — НЕ наоборот.
+              </p>
+              {addonCandidates.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Нет других объектов.</p>
+              ) : (
+                <div className="max-h-48 overflow-auto rounded-md border p-2 grid sm:grid-cols-2 gap-1">
+                  {addonCandidates.map((c) => (
+                    <label key={c.id} className="flex items-center gap-2 text-sm px-1 py-0.5">
+                      <input
+                        type="checkbox"
+                        name="addonIds"
+                        value={c.id}
+                        defaultChecked={obj.addonIds.includes(c.id)}
+                        onChange={formProps.onChange}
+                      />
+                      <span className="truncate">
+                        {c.name} <span className="text-muted-foreground">· {c.categoryName}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <div className="md:col-span-3 flex justify-end">
               <Button type="submit" disabled={!dirty}>Сохранить</Button>
             </div>

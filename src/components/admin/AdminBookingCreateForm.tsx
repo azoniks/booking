@@ -1,8 +1,12 @@
 "use client";
 
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Search, X } from "lucide-react";
+import {
+  ObjectSchedulePicker,
+  type ScheduleState,
+} from "@/components/client/ObjectSchedulePicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -39,6 +43,7 @@ type FormObject = {
     endTime: string;
     endDayOffset: number;
   }[];
+  addons: { id: string; name: string }[];
 };
 
 export function AdminBookingCreateForm({ objects }: { objects: FormObject[] }) {
@@ -48,11 +53,24 @@ export function AdminBookingCreateForm({ objects }: { objects: FormObject[] }) {
   const [objectId, setObjectId] = useState(objects[0]?.id || "");
   const [hourlyMode, setHourlyMode] = useState<"slot" | "custom">("slot");
   const [slotId, setSlotId] = useState("");
+  // Сопутствующие объекты (аддоны): отмеченные + их расписание из ObjectSchedulePicker.
+  const [checkedAddons, setCheckedAddons] = useState<string[]>([]);
+  const [addonStates, setAddonStates] = useState<Record<string, ScheduleState>>({});
 
   const selected = useMemo(
     () => objects.find((o) => o.id === objectId),
     [objects, objectId],
   );
+
+  const handleAddonChange = useCallback((s: ScheduleState) => {
+    setAddonStates((prev) => ({ ...prev, [s.objectId]: s }));
+  }, []);
+
+  function toggleAddon(id: string) {
+    setCheckedAddons((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  }
 
   if (objects.length === 0) {
     return (
@@ -65,67 +83,94 @@ export function AdminBookingCreateForm({ objects }: { objects: FormObject[] }) {
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!selected) return;
-    setSubmitting(true);
     const fd = new FormData(e.currentTarget);
-    const body: Record<string, unknown> = {
-      objectId: selected.id,
-      guestsCount: Number(fd.get("guestsCount") || 1),
+    const guestsCount = Number(fd.get("guestsCount") || 1);
+    const guest = {
       guestName: String(fd.get("guestName") || "").trim(),
       guestEmail: String(fd.get("guestEmail") || "").trim(),
       guestPhone: String(fd.get("guestPhone") || "").trim(),
       guestComment: String(fd.get("guestComment") || "").trim() || undefined,
-      markAsPaid: fd.get("markAsPaid") === "on",
     };
+    const markAsPaid = fd.get("markAsPaid") === "on";
 
+    // Расписание основного объекта (фрагмент без гостевых данных).
+    const mainItem: Record<string, unknown> = { objectId: selected.id, guestsCount };
     if (selected.bookingMode === "DAILY") {
-      body.checkInDate = String(fd.get("checkInDate") || "");
-      body.checkOutDate = String(fd.get("checkOutDate") || "");
+      mainItem.checkInDate = String(fd.get("checkInDate") || "");
+      mainItem.checkOutDate = String(fd.get("checkOutDate") || "");
     } else if (selected.bookingMode === "FULL_DAY") {
       const date = String(fd.get("bookingDate") || "");
       if (!date) {
         toast({ title: "Укажите дату", variant: "destructive" });
-        setSubmitting(false);
         return;
       }
-      body.bookingDate = date;
+      mainItem.bookingDate = date;
     } else if (hourlyMode === "slot") {
       if (!slotId) {
         toast({ title: "Выберите слот", variant: "destructive" });
-        setSubmitting(false);
         return;
       }
-      body.slotId = slotId;
-      body.slotDate = String(fd.get("slotDate") || "");
+      mainItem.slotId = slotId;
+      mainItem.slotDate = String(fd.get("slotDate") || "");
     } else {
       const startAtLocal = String(fd.get("startAt") || "");
       const endAtLocal = String(fd.get("endAt") || "");
       if (!startAtLocal || !endAtLocal) {
         toast({ title: "Укажите начало и конец", variant: "destructive" });
-        setSubmitting(false);
         return;
       }
-      body.startAt = new Date(startAtLocal).toISOString();
-      body.endAt = new Date(endAtLocal).toISOString();
+      mainItem.startAt = new Date(startAtLocal).toISOString();
+      mainItem.endAt = new Date(endAtLocal).toISOString();
     }
 
-    const res = await fetch("/api/admin/bookings", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const j = await res.json();
-    setSubmitting(false);
-    if (!j.ok) {
-      toast({
-        title: "Ошибка",
-        description: j.error || "Не удалось создать бронь",
-        variant: "destructive",
-      });
-      return;
+    // Сопутствующие объекты, отмеченные галочкой.
+    const addonItems: Record<string, unknown>[] = [];
+    for (const id of checkedAddons) {
+      const st = addonStates[id];
+      if (!st || !st.valid || !st.payload) {
+        toast({ title: "Заполните даты/время сопутствующего объекта", variant: "destructive" });
+        return;
+      }
+      addonItems.push(st.payload);
     }
-    toast({ title: "Бронь создана" });
-    setOpen(false);
-    router.push(`/admin/bookings/${j.data.id}`);
+
+    setSubmitting(true);
+    try {
+      if (addonItems.length > 0) {
+        // Групповой заказ: основной объект + сопутствующие, один заказ.
+        const res = await fetch("/api/admin/booking-groups", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...guest, markAsPaid, items: [mainItem, ...addonItems] }),
+        });
+        const j = await res.json();
+        if (!j.ok) {
+          toast({ title: "Ошибка", description: j.error || "Не удалось создать заказ", variant: "destructive" });
+          return;
+        }
+        toast({ title: "Заказ создан", description: `Код: ${j.data.publicCode}` });
+        setOpen(false);
+        router.push("/admin/bookings");
+        router.refresh();
+      } else {
+        // Одиночная бронь.
+        const res = await fetch("/api/admin/bookings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...mainItem, ...guest, markAsPaid }),
+        });
+        const j = await res.json();
+        if (!j.ok) {
+          toast({ title: "Ошибка", description: j.error || "Не удалось создать бронь", variant: "destructive" });
+          return;
+        }
+        toast({ title: "Бронь создана" });
+        setOpen(false);
+        router.push(`/admin/bookings/${j.data.id}`);
+      }
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -155,6 +200,8 @@ export function AdminBookingCreateForm({ objects }: { objects: FormObject[] }) {
                   onChange={(id) => {
                     setObjectId(id);
                     setSlotId("");
+                    setCheckedAddons([]);
+                    setAddonStates({});
                   }}
                 />
               </div>
@@ -258,6 +305,39 @@ export function AdminBookingCreateForm({ objects }: { objects: FormObject[] }) {
                     </>
                   )}
                 </>
+              )}
+
+              {selected && selected.addons.length > 0 && (
+                <div className="md:col-span-2 border-t pt-3 space-y-2">
+                  <Label className="!mb-0">Сопутствующие объекты</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Можно добавить к этой брони — оформится одним заказом.
+                  </p>
+                  {selected.addons.map((a) => {
+                    const checked = checkedAddons.includes(a.id);
+                    return (
+                      <div key={a.id} className="space-y-2">
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleAddon(a.id)}
+                          />
+                          Добавить: {a.name}
+                        </label>
+                        {checked && (
+                          <ObjectSchedulePicker
+                            objectId={a.id}
+                            objectName={a.name}
+                            suppressParentNotice
+                            onChange={handleAddonChange}
+                            onRemove={() => toggleAddon(a.id)}
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               )}
 
               <div>

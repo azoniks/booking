@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useMemo } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { DateRange } from "react-day-picker";
 import { Info, ShoppingCart, Check } from "lucide-react";
 import { useCart } from "./CartProvider";
@@ -152,7 +153,20 @@ function buildSlots(date: Date, start: string, end: string, step: number) {
   return out;
 }
 
-export function BookingForm({ object }: { object: ObjectInfo }) {
+type AddonInfo = { id: string; name: string; basePrice: number; imageUrl: string | null };
+
+export function BookingForm({
+  object,
+  isAddon = false,
+  parentIds = [],
+  addons = [],
+}: {
+  object: ObjectInfo;
+  isAddon?: boolean;
+  parentIds?: string[];
+  addons?: AddonInfo[];
+}) {
+  const router = useRouter();
   const isDaily = object.bookingMode === "DAILY";
   const isFullDay = object.bookingMode === "FULL_DAY";
   const minHours = Math.max(1, object.minBookingHours || 1);
@@ -586,7 +600,20 @@ export function BookingForm({ object }: { object: ObjectInfo }) {
     setAddedToCart(true);
   }
 
+  // Мостик с аддонами: кладём текущий объект в корзину и ведём на карточку аддона.
+  function addThenGoToAddon(addonId: string) {
+    addToCart({ id: object.id, name: object.name, schedule: buildSchedule() });
+    router.push(`/booking/${addonId}`);
+  }
+
+  // Объект-аддон (трейлер): добавляем в корзину и сразу ведём в корзину к оформлению.
+  function addAddonAndGoCart() {
+    addToCart({ id: object.id, name: object.name, schedule: canSubmit ? buildSchedule() : undefined });
+    router.push("/booking/cart");
+  }
+
   const showInCart = addedToCart || inCart(object.id);
+  const parentInCart = parentIds.some((pid) => inCart(pid));
 
   return (
     <Card>
@@ -842,99 +869,158 @@ export function BookingForm({ object }: { object: ObjectInfo }) {
 
           {error && <p className="text-destructive text-sm">{error}</p>}
 
-          <div className="border-t pt-4 space-y-2">
-            {(() => {
-              if (price <= 0) {
-                return (
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-xs text-muted-foreground">К оплате</div>
-                      <div className="text-2xl font-bold text-gold">0 ₽</div>
-                    </div>
-                    <Button type="submit" disabled={submitting || !canSubmit}>
-                      {submitting ? "Создание…" : "Забронировать и оплатить"}
-                    </Button>
+          {isAddon ? (
+            /* Объект-аддон (трейлер): одиночная оплата запрещена — только в заказ. */
+            <div className="border-t pt-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-xs text-muted-foreground">Стоимость</div>
+                  <div className="text-2xl font-bold text-gold">
+                    {price > 0 ? `${price.toLocaleString("ru-RU")} ₽` : "—"}
                   </div>
-                );
-              }
-              const prepay =
-                paymentType === "FIXED" && paymentAmount !== null
-                  ? Math.min(paymentAmount, price)
-                  : Math.round((price * paymentPercent) / 100);
-              const remaining = Math.max(0, price - prepay);
-              const isSplit = remaining > 0;
-              const prepayLabel =
-                paymentType === "FIXED"
-                  ? "К оплате сейчас (фикс. предоплата)"
-                  : `К оплате сейчас (предоплата ${paymentPercent}%)`;
-              return isSplit ? (
-                <>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Полная стоимость</span>
-                    <span>{price.toLocaleString("ru-RU")} ₽</span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm text-muted-foreground">
-                    <span>Остаток (на месте)</span>
-                    <span>{remaining.toLocaleString("ru-RU")} ₽</span>
-                  </div>
-                  <div className="flex items-center justify-between border-t pt-2">
-                    <div>
-                      <div className="text-xs text-muted-foreground">{prepayLabel}</div>
-                      <div className="text-2xl font-bold text-gold">
-                        {prepay.toLocaleString("ru-RU")} ₽
-                      </div>
-                    </div>
-                    <Button type="submit" disabled={submitting || !canSubmit}>
-                      {submitting ? "Создание…" : "Забронировать"}
-                    </Button>
-                  </div>
-                </>
-              ) : (
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-xs text-muted-foreground">К оплате</div>
-                    <div className="text-2xl font-bold text-gold">
-                      {price.toLocaleString("ru-RU")} ₽
-                    </div>
-                  </div>
-                  <Button type="submit" disabled={submitting || !canSubmit}>
-                    {submitting ? "Создание…" : "Забронировать и оплатить"}
-                  </Button>
                 </div>
-              );
-            })()}
-          </div>
-
-          {/* Несколько объектов — добавить в корзину и оформить одним заказом */}
-          <div className="border-t pt-4 space-y-2">
-            {showInCart ? (
-              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                <span className="inline-flex items-center text-sm text-emerald-700">
-                  <Check className="w-4 h-4 mr-1" /> Добавлено в корзину
-                </span>
-                <Button asChild variant="outline" size="sm" className="sm:ml-auto">
-                  <Link href="/booking/cart">Перейти в корзину</Link>
+                <Button type="button" disabled={!canSubmit} onClick={addAddonAndGoCart}>
+                  <ShoppingCart className="w-4 h-4 mr-2" /> Добавить в заказ
                 </Button>
               </div>
-            ) : (
-              <>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full"
-                  disabled={!canSubmit}
-                  onClick={handleAddToCart}
-                >
-                  <ShoppingCart className="w-4 h-4 mr-2" />
-                  Добавить в корзину
-                </Button>
-                <p className="text-xs text-muted-foreground">
-                  Хотите забронировать несколько объектов? Выберите даты и добавьте в
-                  корзину — оформите всё одним заказом и оплатите вместе.
+              {!parentInCart && (
+                <p className="text-xs text-amber-600">
+                  Этот объект бронируется только вместе с основным (например, мостиком).
+                  Добавьте его из карточки основного объекта.
                 </p>
-              </>
-            )}
-          </div>
+              )}
+            </div>
+          ) : (
+            <>
+              <div className="border-t pt-4 space-y-2">
+                {(() => {
+                  if (price <= 0) {
+                    return (
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="text-xs text-muted-foreground">К оплате</div>
+                          <div className="text-2xl font-bold text-gold">0 ₽</div>
+                        </div>
+                        <Button type="submit" disabled={submitting || !canSubmit}>
+                          {submitting ? "Создание…" : "Забронировать и оплатить"}
+                        </Button>
+                      </div>
+                    );
+                  }
+                  const prepay =
+                    paymentType === "FIXED" && paymentAmount !== null
+                      ? Math.min(paymentAmount, price)
+                      : Math.round((price * paymentPercent) / 100);
+                  const remaining = Math.max(0, price - prepay);
+                  const isSplit = remaining > 0;
+                  const prepayLabel =
+                    paymentType === "FIXED"
+                      ? "К оплате сейчас (фикс. предоплата)"
+                      : `К оплате сейчас (предоплата ${paymentPercent}%)`;
+                  return isSplit ? (
+                    <>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Полная стоимость</span>
+                        <span>{price.toLocaleString("ru-RU")} ₽</span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm text-muted-foreground">
+                        <span>Остаток (на месте)</span>
+                        <span>{remaining.toLocaleString("ru-RU")} ₽</span>
+                      </div>
+                      <div className="flex items-center justify-between border-t pt-2">
+                        <div>
+                          <div className="text-xs text-muted-foreground">{prepayLabel}</div>
+                          <div className="text-2xl font-bold text-gold">
+                            {prepay.toLocaleString("ru-RU")} ₽
+                          </div>
+                        </div>
+                        <Button type="submit" disabled={submitting || !canSubmit}>
+                          {submitting ? "Создание…" : "Забронировать"}
+                        </Button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-xs text-muted-foreground">К оплате</div>
+                        <div className="text-2xl font-bold text-gold">
+                          {price.toLocaleString("ru-RU")} ₽
+                        </div>
+                      </div>
+                      <Button type="submit" disabled={submitting || !canSubmit}>
+                        {submitting ? "Создание…" : "Забронировать и оплатить"}
+                      </Button>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Дополнительно: аддоны (напр. трейлер к мостику) */}
+              {addons.length > 0 && (
+                <div className="border-t pt-4 space-y-2">
+                  <div className="text-sm font-medium">Дополнительно</div>
+                  {addons.map((a) => (
+                    <div
+                      key={a.id}
+                      className="flex items-center justify-between gap-2 rounded-md border p-2"
+                    >
+                      <div className="min-w-0">
+                        <div className="font-medium truncate">{a.name}</div>
+                        <div className="text-xs text-muted-foreground">
+                          от {a.basePrice.toLocaleString("ru-RU")} ₽
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={!canSubmit}
+                        onClick={() => addThenGoToAddon(a.id)}
+                      >
+                        Добавить
+                      </Button>
+                    </div>
+                  ))}
+                  <p className="text-xs text-muted-foreground">
+                    {canSubmit
+                      ? "Добавим текущую бронь в заказ и откроем карточку для выбора дат."
+                      : "Сначала выберите дату/время брони."}
+                  </p>
+                </div>
+              )}
+
+              {/* Несколько объектов — добавить в корзину и оформить одним заказом */}
+              <div className="border-t pt-4 space-y-2">
+                {showInCart ? (
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                    <span className="inline-flex items-center text-sm text-emerald-700">
+                      <Check className="w-4 h-4 mr-1" /> Добавлено в корзину
+                    </span>
+                    <Button asChild variant="outline" size="sm" className="sm:ml-auto">
+                      <Link href="/booking/cart">Перейти в корзину</Link>
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full"
+                      disabled={!canSubmit}
+                      onClick={handleAddToCart}
+                    >
+                      <ShoppingCart className="w-4 h-4 mr-2" />
+                      Добавить в корзину
+                    </Button>
+                    <p className="text-xs text-muted-foreground">
+                      Хотите забронировать несколько объектов? Выберите даты и добавьте в
+                      корзину — оформите всё одним заказом и оплатите вместе.
+                    </p>
+                  </>
+                )}
+              </div>
+            </>
+          )}
         </form>
       </CardContent>
     </Card>

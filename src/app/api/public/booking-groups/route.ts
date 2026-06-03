@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/db";
 import { ok, handleError } from "@/lib/api-utils";
 import { publicBookingGroupSchema } from "@/lib/validators";
 import { createBookingGroup } from "@/lib/booking-service";
@@ -99,6 +100,24 @@ export async function POST(req: NextRequest) {
 
     const { items, ...guest } = publicBookingGroupSchema.parse(payload);
     console.log(`[booking-group ${reqId}] schema ok, items=${items.length}, creating…`);
+
+    // Аддоны (трейлер) можно бронировать только вместе с родителем в этом же заказе.
+    const orderIds = new Set(items.map((i) => i.objectId));
+    const objMetas = await prisma.bookingObject.findMany({
+      where: { id: { in: [...orderIds] } },
+      select: { id: true, name: true, isAddon: true, addonOf: { select: { id: true } } },
+    });
+    for (const o of objMetas) {
+      if (o.isAddon && !o.addonOf.some((p) => orderIds.has(p.id))) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: `«${o.name}» можно забронировать только вместе с основным объектом (например, мостиком).`,
+          },
+          { status: 400 },
+        );
+      }
+    }
 
     const group = await withTimeout(
       createBookingGroup(items, guest),

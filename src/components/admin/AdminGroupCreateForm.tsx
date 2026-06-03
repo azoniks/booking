@@ -13,7 +13,14 @@ import {
   type ScheduleState,
 } from "@/components/client/ObjectSchedulePicker";
 
-type ObjOption = { id: string; name: string; categoryName: string; typeName: string };
+type ObjOption = {
+  id: string;
+  name: string;
+  categoryName: string;
+  typeName: string;
+  isAddon: boolean;
+  addons: { id: string; name: string }[];
+};
 
 export function AdminGroupCreateForm({ objects }: { objects: ObjOption[] }) {
   const router = useRouter();
@@ -28,7 +35,9 @@ export function AdminGroupCreateForm({ objects }: { objects: ObjOption[] }) {
   const [error, setError] = useState<string | null>(null);
 
   const byId = useMemo(() => new Map(objects.map((o) => [o.id, o])), [objects]);
-  const available = objects.filter((o) => !selectedIds.includes(o.id));
+  // В основном выборе — только самостоятельные объекты; аддоны добавляются
+  // кнопкой под родителем.
+  const available = objects.filter((o) => !o.isAddon && !selectedIds.includes(o.id));
 
   const handleItemChange = useCallback((s: ScheduleState) => {
     setStates((prev) => ({ ...prev, [s.objectId]: s }));
@@ -112,14 +121,34 @@ export function AdminGroupCreateForm({ objects }: { objects: ObjOption[] }) {
 
       {selectedIds.map((id) => {
         const o = byId.get(id);
+        // Сопутствующие объекты этого объекта, ещё не добавленные в заказ.
+        const suggest = (o?.addons ?? []).filter((a) => !selectedIds.includes(a.id));
         return (
-          <ObjectSchedulePicker
-            key={id}
-            objectId={id}
-            objectName={o ? `${o.name} · ${o.categoryName}` : id}
-            onChange={handleItemChange}
-            onRemove={() => removeObject(id)}
-          />
+          <div key={id} className="space-y-2">
+            <ObjectSchedulePicker
+              objectId={id}
+              objectName={o ? `${o.name} · ${o.categoryName}` : id}
+              suppressParentNotice
+              onChange={handleItemChange}
+              onRemove={() => removeObject(id)}
+            />
+            {suggest.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 pl-1">
+                <span className="text-xs text-muted-foreground">Сопутствующие:</span>
+                {suggest.map((a) => (
+                  <Button
+                    key={a.id}
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => addObject(a.id)}
+                  >
+                    + {a.name}
+                  </Button>
+                ))}
+              </div>
+            )}
+          </div>
         );
       })}
 

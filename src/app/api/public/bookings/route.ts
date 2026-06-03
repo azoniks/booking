@@ -108,6 +108,18 @@ export async function POST(req: NextRequest) {
     const data = publicBookingSchema.parse(payload);
     console.log(`[booking ${reqId}] schema ok, creating booking…`);
 
+    // Объект-аддон нельзя бронировать в одиночку — только в составе заказа с родителем.
+    const objMeta = await prisma.bookingObject.findUnique({
+      where: { id: data.objectId },
+      select: { isAddon: true },
+    });
+    if (objMeta?.isAddon) {
+      return NextResponse.json(
+        { ok: false, error: "Этот объект бронируется только вместе с основным (например, мостиком)." },
+        { status: 400 },
+      );
+    }
+
     const booking = await withTimeout(createBooking(data), 15_000, "createBooking");
     console.log(`[booking ${reqId}] booking created id=${booking.id}`);
 

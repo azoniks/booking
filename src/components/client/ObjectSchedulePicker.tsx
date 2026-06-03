@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import type { DateRange } from "react-day-picker";
-import type { CartSchedule } from "./CartProvider";
+import { type CartSchedule, useCart } from "./CartProvider";
 import { X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -83,6 +84,8 @@ type Availability = {
   paymentPercent: number;
   paymentType: "PERCENT" | "FIXED";
   paymentAmount: number | null;
+  isAddon: boolean;
+  parents: { id: string; name: string }[];
   sections: { total: number; capacity: number; max: number; fullVenuePrice: number | null } | null;
   daysOccupancy: DayOccupancy[];
   slots: Slot[];
@@ -105,13 +108,17 @@ export function ObjectSchedulePicker({
   initial,
   onChange,
   onRemove,
+  suppressParentNotice = false,
 }: {
   objectId: string;
   objectName: string;
   initial?: CartSchedule;
   onChange: (s: ScheduleState) => void;
   onRemove: () => void;
+  // В админке корзины нет — подсказку про родителя-в-корзине не показываем.
+  suppressParentNotice?: boolean;
 }) {
+  const { has } = useCart();
   const [av, setAv] = useState<Availability | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -283,6 +290,26 @@ export function ObjectSchedulePicker({
           <X className="w-4 h-4 mr-1" /> Убрать
         </Button>
       </div>
+
+      {/* Аддон без родителя в корзине — подсказываем, с чем его можно забронировать */}
+      {!suppressParentNotice && av?.isAddon && av.parents.length > 0 && !av.parents.some((p) => has(p.id)) && (
+        <div className="rounded-md border border-amber-200 bg-amber-50/60 p-3 text-sm">
+          <div className="text-amber-800">
+            Этот объект бронируется только вместе с основным. Добавьте один из объектов:
+          </div>
+          <div className="mt-1.5 flex flex-wrap gap-2">
+            {av.parents.map((p) => (
+              <Link
+                key={p.id}
+                href={`/booking/${p.id}`}
+                className="inline-flex items-center px-2.5 py-1 rounded-md border bg-white hover:bg-slate-50 text-xs"
+              >
+                {p.name} →
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       {loading || !av ? (
         <p className="text-sm text-muted-foreground">Загрузка…</p>
