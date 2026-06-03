@@ -204,7 +204,7 @@ export const publicBookingSchema = z
     slotDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
     // FULL_DAY: одна дата, бронь на весь рабочий день типа.
     bookingDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-    guestsCount: z.coerce.number().int().min(1).max(50),
+    guestsCount: z.coerce.number().int().min(1).max(1000),
     guestName: z.string().min(2).max(100),
     guestEmail: z.string().email(),
     guestPhone: z.string().min(5).max(30),
@@ -222,7 +222,7 @@ const bookingGroupItemSchema = z.object({
   slotId: z.string().min(1).optional(),
   slotDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   bookingDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  guestsCount: z.coerce.number().int().min(1).max(50),
+  guestsCount: z.coerce.number().int().min(1).max(1000),
 });
 
 export const publicBookingGroupSchema = z.object({
@@ -230,6 +230,17 @@ export const publicBookingGroupSchema = z.object({
   guestEmail: z.string().email(),
   guestPhone: z.string().min(5).max(30),
   guestComment: z.string().max(1000).optional(),
+  items: z.array(bookingGroupItemSchema).min(1).max(20),
+});
+
+// Админское ручное создание группового заказа: email необязателен,
+// markAsPaid сразу помечает заказ оплаченным (без Tinkoff).
+export const adminBookingGroupSchema = z.object({
+  guestName: z.string().min(2).max(100),
+  guestEmail: z.string().email().or(z.literal("")).optional(),
+  guestPhone: z.string().min(1).max(30),
+  guestComment: z.string().max(1000).optional(),
+  markAsPaid: z.boolean().optional(),
   items: z.array(bookingGroupItemSchema).min(1).max(20),
 });
 
@@ -244,7 +255,7 @@ export const adminBookingSchema = z.object({
   slotId: z.string().min(1).optional(),
   slotDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   bookingDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  guestsCount: z.coerce.number().int().min(1).max(50),
+  guestsCount: z.coerce.number().int().min(1).max(1000),
   guestName: z.string().min(2).max(100),
   guestEmail: z.string().email().or(z.literal("")).optional(),
   guestPhone: z.string().min(1).max(30),

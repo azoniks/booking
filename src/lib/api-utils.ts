@@ -12,7 +12,11 @@ export function fail(message: string, status = 400, details?: unknown) {
 
 export function handleError(err: unknown) {
   if (err instanceof ZodError) {
-    return fail("Ошибка валидации", 400, err.flatten());
+    // Показываем, какие поля не прошли — иначе на форме «Ошибка валидации» без причины.
+    const fields = [
+      ...new Set(err.issues.map((i) => i.path.join(".")).filter(Boolean)),
+    ].join(", ");
+    return fail(fields ? `Ошибка валидации: ${fields}` : "Ошибка валидации", 400, err.flatten());
   }
   if (err instanceof Error) {
     if (err.name === "BookingConflictError") {

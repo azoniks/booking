@@ -596,6 +596,110 @@ export async function refundPayment(bookingId: string): Promise<{
   };
 }
 
+// Отмена всех броней группы + самой группы (без возврата денег) — для неоплаченных.
+export async function cancelGroup(groupId: string, reason = "Отменён администратором") {
+  const now = new Date();
+  await prisma.$transaction([
+    prisma.bookingGroup.update({
+      where: { id: groupId },
+      data: { status: "CANCELLED", cancelledAt: now },
+    }),
+    prisma.booking.updateMany({
+      where: { groupId, status: { in: ["PENDING", "PAID"] } },
+      data: { status: "CANCELLED", cancelReason: reason, cancelledAt: now },
+    }),
+    prisma.payment.updateMany({
+      where: { groupId, status: "PENDING" },
+      data: { status: "CANCELED" },
+    }),
+  ]);
+}
+
+/**
+ * Возврат средств по групповому заказу: один платёж Tinkoff на всю группу,
+ * затем все брони и группа → CANCELLED, платёж → REFUNDED.
+ */
+export async function refundGroupPayment(groupId: string): Promise<{
+  refundedAmount: number;
+  tinkoffStatus?: string;
+  mock: boolean;
+}> {
+  const payment = await prisma.payment.findUnique({ where: { groupId } });
+  if (!payment) throw new Error("Платёж по заказу не найден");
+  if (payment.status !== "SUCCEEDED") {
+    throw new Error(
+      `Возврат доступен только для оплаченных заказов (текущий статус: ${payment.status})`,
+    );
+  }
+
+  const amountRub = Number(payment.amount);
+  const amountKopecks = Math.round(amountRub * 100);
+  const isMockPayment = payment.provider === "tinkoff-mock";
+  const cfg = await getTinkoffConfig();
+
+  const finalize = (rawPayload: object) =>
+    prisma.$transaction([
+      prisma.payment.update({
+        where: { id: payment.id },
+        data: { status: "REFUNDED", rawPayload },
+      }),
+      prisma.bookingGroup.update({
+        where: { id: groupId },
+        data: { status: "CANCELLED", cancelledAt: new Date() },
+      }),
+      prisma.booking.updateMany({
+        where: { groupId, status: { in: ["PENDING", "PAID"] } },
+        data: { status: "CANCELLED", cancelReason: "Возврат средств", cancelledAt: new Date() },
+      }),
+    ]);
+
+  if (isMockPayment || cfg.mode === "mock") {
+    await finalize({ mock: true, refundedAt: new Date().toISOString() });
+    return { refundedAmount: amountRub, mock: true };
+  }
+
+  if (!cfg.terminalKey || !cfg.password) {
+    throw new Error("Tinkoff не настроен: задайте TerminalKey и Password в админке");
+  }
+  if (!payment.externalId) {
+    throw new Error("Нет PaymentId в Tinkoff — возврат невозможен");
+  }
+
+  const params: Record<string, string | number> = {
+    TerminalKey: cfg.terminalKey,
+    PaymentId: payment.externalId,
+    Amount: amountKopecks,
+  };
+  const Token = signTinkoff(params, cfg.password);
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
+  let data: TinkoffCancelResponse;
+  try {
+    const res = await fetch(`${cfg.apiUrl}/Cancel`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...params, Token }),
+      signal: controller.signal,
+    });
+    data = (await res.json()) as TinkoffCancelResponse;
+  } catch (e) {
+    const aborted = e instanceof DOMException && e.name === "AbortError";
+    throw new Error(
+      aborted ? "Tinkoff не ответил за 15 секунд" : `Tinkoff недоступен: ${String(e)}`,
+    );
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  if (!data.Success) {
+    throw new Error(`Tinkoff Cancel failed: ${data.Message || data.ErrorCode || "unknown"}`);
+  }
+
+  await finalize(data as unknown as object);
+  return { refundedAmount: amountRub, tinkoffStatus: data.Status, mock: false };
+}
+
 export async function applyMockPayment(bookingId: string, succeeded: boolean) {
   const payment = await prisma.payment.findUnique({
     where: { bookingId },

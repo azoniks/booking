@@ -45,6 +45,7 @@ export async function POST(req: NextRequest) {
       endAt: data.endAt,
       slotId: data.slotId,
       slotDate: data.slotDate,
+      bookingDate: data.bookingDate,
       guestsCount: data.guestsCount,
       guestName: data.guestName,
       guestEmail: data.guestEmail || "",

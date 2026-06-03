@@ -31,6 +31,7 @@ export default async function BookingsPage({
       include: {
         object: { include: { objectType: { include: { category: true } } } },
         payment: true,
+        group: { select: { id: true, publicCode: true, status: true, totalPrice: true } },
       },
     }),
     prisma.bookingObject.findMany({
@@ -85,6 +86,28 @@ export default async function BookingsPage({
     return qs ? `/admin/bookings?${qs}` : "/admin/bookings";
   };
 
+  // Группируем брони: входящие в один заказ — в общий блок, остальные — по одной.
+  // Порядок блоков сохраняет исходную сортировку (по дате создания, desc).
+  type Item = (typeof items)[number];
+  type Block =
+    | { kind: "single"; booking: Item }
+    | { kind: "group"; group: NonNullable<Item["group"]>; bookings: Item[] };
+  const blocks: Block[] = [];
+  const groupPos = new Map<string, number>();
+  for (const b of items) {
+    if (b.group) {
+      const idx = groupPos.get(b.group.id);
+      if (idx === undefined) {
+        groupPos.set(b.group.id, blocks.length);
+        blocks.push({ kind: "group", group: b.group, bookings: [b] });
+      } else {
+        (blocks[idx] as Extract<Block, { kind: "group" }>).bookings.push(b);
+      }
+    } else {
+      blocks.push({ kind: "single", booking: b });
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
@@ -95,6 +118,12 @@ export default async function BookingsPage({
             cat={cat}
             visibleCount={items.length}
           />
+          <Link
+            href="/admin/bookings/new-group"
+            className="inline-flex items-center h-10 px-4 rounded-md border bg-secondary text-secondary-foreground hover:bg-secondary/80 text-sm whitespace-nowrap"
+          >
+            + Групповой заказ
+          </Link>
           <AdminBookingCreateForm objects={formObjects} />
         </div>
       </div>
@@ -146,34 +175,85 @@ export default async function BookingsPage({
       </div>
 
       <div className="grid gap-2">
-        {items.map((b) => (
-          <Card key={b.id} className="hover:bg-slate-50">
-            <CardContent className="p-3 flex items-center gap-2">
-              <Link
-                href={`/admin/bookings/${b.id}`}
-                className="flex-1 min-w-0 flex flex-wrap items-center justify-between gap-2"
-              >
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-mono text-xs text-muted-foreground">{b.publicCode}</span>
-                    <span className="font-medium">{b.object.name}</span>
-                    <Badge variant="outline">{b.object.objectType.category.name}</Badge>
-                    <StatusBadge status={b.status} />
+        {blocks.map((blk) =>
+          blk.kind === "single" ? (
+            <Card key={blk.booking.id} className="hover:bg-slate-50">
+              <CardContent className="p-3 flex items-center gap-2">
+                <Link
+                  href={`/admin/bookings/${blk.booking.id}`}
+                  className="flex-1 min-w-0 flex flex-wrap items-center justify-between gap-2"
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-mono text-xs text-muted-foreground">{blk.booking.publicCode}</span>
+                      <span className="font-medium">{blk.booking.object.name}</span>
+                      <Badge variant="outline">{blk.booking.object.objectType.category.name}</Badge>
+                      <StatusBadge status={blk.booking.status} />
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {blk.booking.guestName} · {blk.booking.guestPhone} · {blk.booking.guestsCount} гост.
+                    </div>
                   </div>
-                  <div className="text-sm text-muted-foreground">
-                    {b.guestName} · {b.guestPhone} · {b.guestsCount} гост.
+                  <div className="text-sm text-right">
+                    <div>{formatLocal(blk.booking.startAt)} — {formatLocal(blk.booking.endAt)}</div>
+                    <div className="font-semibold">{formatRub(blk.booking.totalPrice.toString())}</div>
+                  </div>
+                </Link>
+                <BookingRowDelete id={blk.booking.id} publicCode={blk.booking.publicCode} />
+              </CardContent>
+            </Card>
+          ) : (
+            <Card key={blk.group.id} className="border-primary/40 bg-primary/[0.02]">
+              <CardContent className="p-3 space-y-2">
+                {/* Шапка заказа */}
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2 flex-wrap min-w-0">
+                    <Badge variant="secondary">Заказ</Badge>
+                    <span className="font-mono text-sm font-semibold">{blk.group.publicCode}</span>
+                    <StatusBadge status={blk.group.status} />
+                    <span className="text-xs text-muted-foreground">
+                      {blk.bookings.length} объ.
+                    </span>
+                  </div>
+                  <div className="text-sm font-semibold">
+                    {formatRub(blk.group.totalPrice.toString())}
                   </div>
                 </div>
-                <div className="text-sm text-right">
-                  <div>{formatLocal(b.startAt)} — {formatLocal(b.endAt)}</div>
-                  <div className="font-semibold">{formatRub(b.totalPrice.toString())}</div>
+                <div className="text-sm text-muted-foreground">
+                  {blk.bookings[0].guestName} · {blk.bookings[0].guestPhone}
                 </div>
-              </Link>
-              <BookingRowDelete id={b.id} publicCode={b.publicCode} />
-            </CardContent>
-          </Card>
-        ))}
-        {items.length === 0 && (
+
+                {/* Брони заказа */}
+                <div className="divide-y rounded-md border bg-background">
+                  {blk.bookings.map((b) => (
+                    <Link
+                      key={b.id}
+                      href={`/admin/bookings/${b.id}`}
+                      className="flex items-center justify-between gap-2 p-2.5 hover:bg-slate-50 first:rounded-t-md last:rounded-b-md"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-medium">{b.object.name}</span>
+                          <Badge variant="outline">{b.object.objectType.category.name}</Badge>
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {b.guestsCount} гост. · <span className="font-mono">{b.publicCode}</span>
+                        </div>
+                      </div>
+                      <div className="text-sm text-right shrink-0">
+                        <div className="text-muted-foreground">
+                          {formatLocal(b.startAt)} — {formatLocal(b.endAt)}
+                        </div>
+                        <div className="font-medium">{formatRub(b.totalPrice.toString())}</div>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          ),
+        )}
+        {blocks.length === 0 && (
           <p className="text-sm text-muted-foreground">Нет броней</p>
         )}
       </div>
