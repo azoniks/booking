@@ -2,12 +2,17 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronDown, Plus, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { AdminBookingCreateForm } from "./AdminBookingCreateForm";
+import { AdminGroupCreateFormSheet } from "./AdminGroupCreateFormSheet";
+
+type SingleFormObjects = React.ComponentProps<typeof AdminBookingCreateForm>["objects"];
+type GroupFormObjects = React.ComponentProps<typeof AdminGroupCreateFormSheet>["objects"];
 
 const TZ_OFFSET_MIN = 180; // Europe/Moscow
 const DAY_MS = 86_400_000;
@@ -73,7 +78,15 @@ function plural(n: number, forms: [string, string, string]) {
 type Mode = "days" | "hours";
 type View = "auto" | "table" | "list";
 
-export function BookingsTimeline() {
+export function BookingsTimeline({
+  singleFormObjects = [],
+  groupFormObjects = [],
+}: {
+  // Объекты для форм создания брони из мобильного списка (опц. — без них кнопки
+  // создания не показываем).
+  singleFormObjects?: SingleFormObjects;
+  groupFormObjects?: GroupFormObjects;
+} = {}) {
   const [mode, setMode] = useState<Mode>("days");
   // Представление: на узких экранах шахматка нечитаема — показываем список дат.
   // "auto" выбирает по ширине, table/list форсируют вид вручную.
@@ -393,8 +406,8 @@ export function BookingsTimeline() {
               </div>
             </>
           )}
-          {/* Фильтры по категориям и видам объектов */}
-          <div className="flex items-end gap-2 flex-wrap">
+          {/* Фильтры по категориям и видам объектов — на мобиле скрыты */}
+          <div className="hidden sm:flex items-end gap-2 flex-wrap">
             <MultiSelectFilter
               label="Категории"
               options={catOptions}
@@ -457,6 +470,8 @@ export function BookingsTimeline() {
             visibleTypes={visibleTypes}
             bookings={data.bookings}
             blocks={data.blocks}
+            singleFormObjects={singleFormObjects}
+            groupFormObjects={groupFormObjects}
           />
         ) : (
           <div className="flex border-t">
@@ -703,18 +718,44 @@ function MobileDayList({
   visibleTypes,
   bookings,
   blocks,
+  singleFormObjects,
+  groupFormObjects,
 }: {
   days: Date[];
   mode: Mode;
   visibleTypes: TypeRow[];
   bookings: BookingItem[];
   blocks: BlockItem[];
+  singleFormObjects: SingleFormObjects;
+  groupFormObjects: GroupFormObjects;
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(() => {
     // По умолчанию раскрываем сегодняшний день, если он в окне.
     const todayKey = dayKey(todayLocal());
     return new Set(days.some((d) => dayKey(d) === todayKey) ? [todayKey] : []);
   });
+
+  // Создание брони с конкретной даты: открытая форма + выбранный день (YYYY-MM-DD).
+  const [singleOpen, setSingleOpen] = useState(false);
+  const [groupOpen, setGroupOpen] = useState(false);
+  const [pendingDate, setPendingDate] = useState<string | null>(null);
+  const canCreate = singleFormObjects.length > 0 || groupFormObjects.length > 0;
+
+  // YYYY-MM-DD локального дня списка (d — локальная полночь).
+  function dayISO(d: Date) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+  function openSingle(d: Date) {
+    setPendingDate(dayISO(d));
+    setSingleOpen(true);
+  }
+  function openGroup(d: Date) {
+    setPendingDate(dayISO(d));
+    setGroupOpen(true);
+  }
 
   function toggle(key: string) {
     setExpanded((prev) => {
@@ -765,51 +806,82 @@ function MobileDayList({
 
         return (
           <div key={key}>
-            <button
-              type="button"
-              onClick={() => toggle(key)}
+            <div
               className={cn(
-                "w-full flex items-center gap-3 px-4 py-3 text-left",
+                "flex items-center gap-2 pl-4 pr-3 py-3",
                 isToday && "bg-amber-50",
               )}
             >
-              <div className="flex flex-col items-center justify-center w-12 shrink-0">
-                <span
-                  className={cn(
-                    "text-lg font-semibold leading-none",
-                    isWeekend && "text-rose-600",
-                    isToday && "text-amber-700",
-                  )}
-                >
-                  {d.getDate()}
-                </span>
-                <span className="text-[11px] text-muted-foreground uppercase">
-                  {WEEKDAYS[d.getDay()]}
-                </span>
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium">
-                  {d.toLocaleDateString("ru-RU", { day: "numeric", month: "long" })}
-                </div>
-                {count === 0 ? (
-                  <span className="inline-block mt-0.5 text-xs rounded px-1.5 py-0.5 bg-emerald-50 text-emerald-700">
-                    свободно
+              <button
+                type="button"
+                onClick={() => toggle(key)}
+                className="flex flex-1 min-w-0 items-center gap-3 text-left"
+              >
+                <div className="flex flex-col items-center justify-center w-12 shrink-0">
+                  <span
+                    className={cn(
+                      "text-lg font-semibold leading-none",
+                      isWeekend && "text-rose-600",
+                      isToday && "text-amber-700",
+                    )}
+                  >
+                    {d.getDate()}
                   </span>
-                ) : (
-                  <div className="text-xs text-muted-foreground">
-                    {dayBookings.length > 0 && `${dayBookings.length} ${plural(dayBookings.length, ["бронь", "брони", "броней"])}`}
-                    {dayBookings.length > 0 && dayBlocks.length > 0 && " · "}
-                    {dayBlocks.length > 0 && `${dayBlocks.length} ${plural(dayBlocks.length, ["блокировка", "блокировки", "блокировок"])}`}
+                  <span className="text-[11px] text-muted-foreground uppercase">
+                    {WEEKDAYS[d.getDay()]}
+                  </span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium">
+                    {d.toLocaleDateString("ru-RU", { day: "numeric", month: "long" })}
                   </div>
-                )}
-              </div>
-              <ChevronDown
-                className={cn(
-                  "w-5 h-5 shrink-0 text-muted-foreground transition-transform",
-                  isOpen && "rotate-180",
-                )}
-              />
-            </button>
+                  {count === 0 ? (
+                    <span className="inline-block mt-0.5 text-xs rounded px-1.5 py-0.5 bg-emerald-50 text-emerald-700">
+                      свободно
+                    </span>
+                  ) : (
+                    <div className="text-xs text-muted-foreground">
+                      {dayBookings.length > 0 && `${dayBookings.length} ${plural(dayBookings.length, ["бронь", "брони", "броней"])}`}
+                      {dayBookings.length > 0 && dayBlocks.length > 0 && " · "}
+                      {dayBlocks.length > 0 && `${dayBlocks.length} ${plural(dayBlocks.length, ["блокировка", "блокировки", "блокировок"])}`}
+                    </div>
+                  )}
+                </div>
+                <ChevronDown
+                  className={cn(
+                    "w-5 h-5 shrink-0 text-muted-foreground transition-transform",
+                    isOpen && "rotate-180",
+                  )}
+                />
+              </button>
+              {/* Действия: создать одиночную / групповую бронь на этот день */}
+              {canCreate && (
+                <div className="flex items-center gap-1 shrink-0">
+                  {singleFormObjects.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => openSingle(d)}
+                      aria-label="Новая бронь на этот день"
+                      title="Новая бронь"
+                      className="inline-flex items-center justify-center h-8 w-8 rounded-md border bg-white text-foreground hover:bg-slate-50"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  )}
+                  {groupFormObjects.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => openGroup(d)}
+                      aria-label="Групповой заказ на этот день"
+                      title="Групповой заказ"
+                      className="inline-flex items-center justify-center h-8 w-8 rounded-md border bg-white text-foreground hover:bg-slate-50"
+                    >
+                      <Users className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
 
             {isOpen && count > 0 && (
               <div className="px-4 pb-3 space-y-2 bg-slate-50/60">
@@ -880,6 +952,25 @@ function MobileDayList({
           </div>
         );
       })}
+
+      {/* Управляемые формы создания — один экземпляр на список, дата из pendingDate */}
+      {singleFormObjects.length > 0 && (
+        <AdminBookingCreateForm
+          objects={singleFormObjects}
+          hideTrigger
+          open={singleOpen}
+          onOpenChange={setSingleOpen}
+          initialDate={pendingDate ?? undefined}
+        />
+      )}
+      {groupFormObjects.length > 0 && (
+        <AdminGroupCreateFormSheet
+          objects={groupFormObjects}
+          open={groupOpen}
+          onOpenChange={setGroupOpen}
+          initialDate={pendingDate ?? undefined}
+        />
+      )}
     </div>
   );
 }

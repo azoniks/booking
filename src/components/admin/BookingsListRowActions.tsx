@@ -113,10 +113,13 @@ export function BookingsBulkDelete({
       size="sm"
       onClick={onClick}
       disabled={busy || visibleCount === 0}
+      aria-label="Удалить по фильтру"
+      title="Удалить по фильтру"
       className="text-destructive border-destructive/40 hover:bg-destructive/10"
     >
-      <Trash2 className="w-3.5 h-3.5 mr-1.5" />
-      {busy ? "Удаление…" : "Удалить по фильтру"}
+      <Trash2 className="w-3.5 h-3.5 sm:mr-1.5" />
+      {/* На узких экранах — только иконка, чтобы ряд не выезжал за край */}
+      <span className="hidden sm:inline">{busy ? "Удаление…" : "Удалить по фильтру"}</span>
     </Button>
   );
 }

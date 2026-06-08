@@ -12,6 +12,7 @@ import {
   ObjectSchedulePicker,
   type ScheduleState,
 } from "@/components/client/ObjectSchedulePicker";
+import type { CartSchedule } from "@/components/client/CartProvider";
 
 type ObjOption = {
   id: string;
@@ -22,7 +23,14 @@ type ObjOption = {
   addons: { id: string; name: string }[];
 };
 
-export function AdminGroupCreateForm({ objects }: { objects: ObjOption[] }) {
+export function AdminGroupCreateForm({
+  objects,
+  initialDate,
+}: {
+  objects: ObjOption[];
+  /** Предзаполнить дату заезда/начала для добавляемых объектов (YYYY-MM-DD). */
+  initialDate?: string;
+}) {
   const router = useRouter();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [states, setStates] = useState<Record<string, ScheduleState>>({});
@@ -35,6 +43,20 @@ export function AdminGroupCreateForm({ objects }: { objects: ObjOption[] }) {
   const [error, setError] = useState<string | null>(null);
 
   const byId = useMemo(() => new Map(objects.map((o) => [o.id, o])), [objects]);
+
+  // Предзаполнение даты для добавляемых объектов. Режим объекта заранее неизвестен,
+  // поэтому кладём дату во все поля, не требующие второй даты — ObjectSchedulePicker
+  // возьмёт только подходящие своему режиму (checkOutDate НЕ задаём: суточному
+  // range без выезда не предзаполнится — админ выберет даты сам).
+  const initialSchedule = useMemo<CartSchedule | undefined>(() => {
+    if (!initialDate) return undefined;
+    return {
+      checkInDate: initialDate,
+      bookingDate: initialDate,
+      slotDate: initialDate,
+      startAt: `${initialDate}T12:00:00`,
+    };
+  }, [initialDate]);
   // В основном выборе — только самостоятельные объекты; аддоны добавляются
   // кнопкой под родителем.
   const available = objects.filter((o) => !o.isAddon && !selectedIds.includes(o.id));
@@ -129,6 +151,7 @@ export function AdminGroupCreateForm({ objects }: { objects: ObjOption[] }) {
               objectId={id}
               objectName={o ? `${o.name} · ${o.categoryName}` : id}
               suppressParentNotice
+              initial={initialSchedule}
               onChange={handleItemChange}
               onRemove={() => removeObject(id)}
             />

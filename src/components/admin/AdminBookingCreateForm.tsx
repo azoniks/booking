@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Search, X } from "lucide-react";
+import { Search, X, Plus } from "lucide-react";
 import {
   ObjectSchedulePicker,
   type ScheduleState,
@@ -46,13 +46,36 @@ type FormObject = {
   addons: { id: string; name: string }[];
 };
 
-export function AdminBookingCreateForm({ objects }: { objects: FormObject[] }) {
+export function AdminBookingCreateForm({
+  objects,
+  open: openProp,
+  onOpenChange,
+  hideTrigger = false,
+  initialDate,
+}: {
+  objects: FormObject[];
+  /** Controlled-режим: если передан open/onOpenChange — состоянием управляет родитель. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  /** Скрыть встроенный триггер-кнопку (когда форму открывают снаружи). */
+  hideTrigger?: boolean;
+  /** Предзаполнить дату заезда/начала (YYYY-MM-DD). */
+  initialDate?: string;
+}) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  // Controlled, если родитель передал open+onOpenChange; иначе внутренний state.
+  const [openInternal, setOpenInternal] = useState(false);
+  const open = openProp ?? openInternal;
+  const setOpen = (next: boolean) => {
+    if (onOpenChange) onOpenChange(next);
+    else setOpenInternal(next);
+  };
   const [submitting, setSubmitting] = useState(false);
   const [objectId, setObjectId] = useState(objects[0]?.id || "");
   const [hourlyMode, setHourlyMode] = useState<"slot" | "custom">("slot");
   const [slotId, setSlotId] = useState("");
+  // Значение даты заезда/начала — управляемое, чтобы предзаполнять из initialDate.
+  const [dateValue, setDateValue] = useState(initialDate ?? "");
   // Сопутствующие объекты (аддоны): отмеченные + их расписание из ObjectSchedulePicker.
   const [checkedAddons, setCheckedAddons] = useState<string[]>([]);
   const [addonStates, setAddonStates] = useState<Record<string, ScheduleState>>({});
@@ -61,6 +84,11 @@ export function AdminBookingCreateForm({ objects }: { objects: FormObject[] }) {
     () => objects.find((o) => o.id === objectId),
     [objects, objectId],
   );
+
+  // При открытии формы с новой initialDate подставляем её в поле даты.
+  useEffect(() => {
+    if (open && initialDate) setDateValue(initialDate);
+  }, [open, initialDate]);
 
   const handleAddonChange = useCallback((s: ScheduleState) => {
     setAddonStates((prev) => ({ ...prev, [s.objectId]: s }));
@@ -175,9 +203,13 @@ export function AdminBookingCreateForm({ objects }: { objects: FormObject[] }) {
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger asChild>
-        <Button>+ Новая бронь</Button>
-      </SheetTrigger>
+      {!hideTrigger && (
+        <SheetTrigger asChild>
+          <Button size="icon" aria-label="Новая бронь" title="Новая бронь">
+            <Plus className="w-5 h-5" />
+          </Button>
+        </SheetTrigger>
+      )}
       <SheetContent side="right" className="w-full sm:max-w-2xl">
         <SheetHeader>
           <SheetTitle>Новая бронь</SheetTitle>
@@ -210,7 +242,13 @@ export function AdminBookingCreateForm({ objects }: { objects: FormObject[] }) {
                 <>
                   <div>
                     <Label>Заезд</Label>
-                    <Input name="checkInDate" type="date" required />
+                    <Input
+                      name="checkInDate"
+                      type="date"
+                      required
+                      value={dateValue}
+                      onChange={(e) => setDateValue(e.target.value)}
+                    />
                     {selected.checkInTime && (
                       <p className="text-xs text-muted-foreground mt-1">
                         время заезда: {selected.checkInTime}
@@ -232,7 +270,13 @@ export function AdminBookingCreateForm({ objects }: { objects: FormObject[] }) {
               {selected?.bookingMode === "FULL_DAY" && (
                 <div className="md:col-span-2">
                   <Label>Дата</Label>
-                  <Input name="bookingDate" type="date" required />
+                  <Input
+                    name="bookingDate"
+                    type="date"
+                    required
+                    value={dateValue}
+                    onChange={(e) => setDateValue(e.target.value)}
+                  />
                   <p className="text-xs text-muted-foreground mt-1">
                     бронь на весь рабочий день
                   </p>
@@ -289,7 +333,13 @@ export function AdminBookingCreateForm({ objects }: { objects: FormObject[] }) {
                       </div>
                       <div>
                         <Label>Дата</Label>
-                        <Input name="slotDate" type="date" required />
+                        <Input
+                          name="slotDate"
+                          type="date"
+                          required
+                          value={dateValue}
+                          onChange={(e) => setDateValue(e.target.value)}
+                        />
                       </div>
                     </>
                   ) : (

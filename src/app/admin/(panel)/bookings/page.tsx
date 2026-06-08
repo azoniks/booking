@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Users } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +10,7 @@ import {
   BookingRowDelete,
   BookingsBulkDelete,
 } from "@/components/admin/BookingsListRowActions";
+import { CollapsibleFilters } from "@/components/admin/CollapsibleFilters";
 
 export const dynamic = "force-dynamic";
 
@@ -123,15 +125,17 @@ export default async function BookingsPage({
           />
           <Link
             href="/admin/bookings/new-group"
-            className="inline-flex items-center h-10 px-4 rounded-md border bg-secondary text-secondary-foreground hover:bg-secondary/80 text-sm whitespace-nowrap"
+            aria-label="Групповой заказ"
+            title="Групповой заказ"
+            className="inline-flex items-center justify-center h-10 w-10 rounded-md border bg-secondary text-secondary-foreground hover:bg-secondary/80"
           >
-            + Групповой заказ
+            <Users className="w-5 h-5" />
           </Link>
           <AdminBookingCreateForm objects={formObjects} />
         </div>
       </div>
 
-      <div className="space-y-2">
+      <CollapsibleFilters activeCount={(status ? 1 : 0) + (cat ? 1 : 0)}>
         <div className="flex gap-2 flex-wrap">
           {statusTabs.map((t) => (
             <Link
@@ -175,7 +179,7 @@ export default async function BookingsPage({
             ))}
           </div>
         )}
-      </div>
+      </CollapsibleFilters>
 
       <div className="grid gap-2">
         {blocks.map((blk) =>

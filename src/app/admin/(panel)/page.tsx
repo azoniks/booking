@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export default async function DashboardPage() {
   const now = new Date();
 
-  const [pendingCount, paidCount, upcoming, totalObjects, totalCategories] = await Promise.all([
+  const [pendingCount, paidCount, upcoming, totalObjects, totalCategories, objects] = await Promise.all([
     prisma.booking.count({ where: { status: "PENDING" } }),
     prisma.booking.count({ where: { status: "PAID" } }),
     // Текущие и будущие брони (включая идущие сейчас)
@@ -26,7 +26,56 @@ export default async function DashboardPage() {
     }),
     prisma.bookingObject.count(),
     prisma.category.count(),
+    // Объекты для форм создания брони прямо с дашборда (как в bookings/page.tsx и
+    // new-group/page.tsx). Берём ВСЕ активные, включая аддоны — групповой форме они
+    // нужны; одиночная форма ниже отфильтрует isAddon.
+    prisma.bookingObject.findMany({
+      where: { status: "ACTIVE" },
+      orderBy: [{ name: "asc" }],
+      include: {
+        objectType: {
+          include: {
+            category: true,
+            slots: { orderBy: [{ sortOrder: "asc" }, { startTime: "asc" }] },
+          },
+        },
+        addons: { where: { status: "ACTIVE" }, select: { id: true, name: true } },
+      },
+    }),
   ]);
+
+  // Одиночная форма (AdminBookingCreateForm.FormObject) — без аддонов как основных.
+  const singleFormObjects = objects
+    .filter((o) => !o.isAddon)
+    .map((o) => ({
+      id: o.id,
+      name: o.name,
+      categoryName: o.objectType.category.name,
+      typeName: o.objectType.name,
+      bookingMode: o.objectType.category.bookingMode,
+      checkInTime: o.objectType.checkInTime,
+      checkOutTime: o.objectType.checkOutTime,
+      baseCapacity: o.objectType.baseCapacity,
+      maxCapacity: o.objectType.maxCapacity,
+      slots: o.objectType.slots.map((s) => ({
+        id: s.id,
+        name: s.name,
+        startTime: s.startTime,
+        endTime: s.endTime,
+        endDayOffset: s.endDayOffset,
+      })),
+      addons: o.addons.map((a) => ({ id: a.id, name: a.name })),
+    }));
+
+  // Групповая форма (AdminGroupCreateForm.ObjOption) — включает аддоны.
+  const groupFormObjects = objects.map((o) => ({
+    id: o.id,
+    name: o.name,
+    categoryName: o.objectType.category.name,
+    typeName: o.objectType.name,
+    isAddon: o.isAddon,
+    addons: o.addons.map((a) => ({ id: a.id, name: a.name })),
+  }));
 
   return (
     <div className="space-y-6">
@@ -67,7 +116,10 @@ export default async function DashboardPage() {
         </Card>
       </div>
 
-      <BookingsTimeline />
+      <BookingsTimeline
+        singleFormObjects={singleFormObjects}
+        groupFormObjects={groupFormObjects}
+      />
 
       <Card>
         <CardHeader>
