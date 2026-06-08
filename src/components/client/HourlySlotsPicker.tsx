@@ -275,11 +275,11 @@ export function HourlySlotsPicker({
                       !past &&
                         isBusy &&
                         "bg-rose-50 text-rose-400 border-rose-200 line-through cursor-not-allowed",
-                      !past && !isBusy && !inRange && "bg-white hover:bg-slate-100 border-slate-200",
+                      !past && !isBusy && !inRange && "bg-emerald-50 hover:bg-emerald-100 border-emerald-200 text-emerald-700",
                       !past && inRange && "bg-primary text-primary-foreground border-primary",
                       // выделение валидных кандидатов на end
                       !past && !isBusy && isCandidate && !inRange &&
-                        "bg-emerald-50 border-emerald-300 text-emerald-700",
+                        "bg-emerald-100 border-emerald-400 text-emerald-800 font-medium",
                       // out-of-range — приглушено
                       !past && isOutOfRange &&
                         "opacity-50 bg-white hover:bg-white border-dashed",
@@ -317,12 +317,12 @@ export function HourlySlotsPicker({
 
             <div className="mt-3 flex flex-wrap gap-3 text-xs text-muted-foreground">
               <span className="flex items-center gap-1">
-                <span className="inline-block w-3 h-3 rounded-sm bg-white border border-slate-300" />
+                <span className="inline-block w-3 h-3 rounded-sm bg-emerald-50 border border-emerald-200" />
                 свободно
               </span>
               {startSlot !== null && endSlot === null && (
                 <span className="flex items-center gap-1">
-                  <span className="inline-block w-3 h-3 rounded-sm bg-emerald-50 border border-emerald-300" />
+                  <span className="inline-block w-3 h-3 rounded-sm bg-emerald-100 border border-emerald-400" />
                   допустимое окончание
                 </span>
               )}

@@ -61,11 +61,24 @@ function todayLocal() {
   const d = new Date();
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
+function plural(n: number, forms: [string, string, string]) {
+  const n10 = Math.abs(n) % 10;
+  const n100 = Math.abs(n) % 100;
+  if (n100 >= 11 && n100 <= 19) return forms[2];
+  if (n10 === 1) return forms[0];
+  if (n10 >= 2 && n10 <= 4) return forms[1];
+  return forms[2];
+}
 
 type Mode = "days" | "hours";
+type View = "auto" | "table" | "list";
 
 export function BookingsTimeline() {
   const [mode, setMode] = useState<Mode>("days");
+  // Представление: на узких экранах шахматка нечитаема — показываем список дат.
+  // "auto" выбирает по ширине, table/list форсируют вид вручную.
+  const [view, setView] = useState<View>("auto");
+  const [isWide, setIsWide] = useState(true);
   const [from, setFrom] = useState(() => isoDate(startOfMonth(new Date())));
   const [to, setTo] = useState(() => isoDate(endOfMonth(new Date())));
   const [selectedCats, setSelectedCats] = useState<string[]>([]);
@@ -88,6 +101,30 @@ export function BookingsTimeline() {
       aborted = true;
     };
   }, [from, to]);
+
+  // Отслеживаем ширину экрана для "auto"-режима (md = 768px).
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mql = window.matchMedia("(min-width: 768px)");
+    const apply = () => setIsWide(mql.matches);
+    apply();
+    mql.addEventListener("change", apply);
+    return () => mql.removeEventListener("change", apply);
+  }, []);
+
+  const effectiveView: "table" | "list" =
+    view === "auto" ? (isWide ? "table" : "list") : view;
+
+  // Список всегда дневной (часового представления списка нет). Если попали в
+  // список из часового режима — в т.ч. авто на узком экране — сбрасываем mode,
+  // чтобы навигация по периоду была месячной, а не «сегодня/+завтра».
+  useEffect(() => {
+    if (effectiveView === "list" && mode === "hours") {
+      setMode("days");
+      setFrom(isoDate(startOfMonth(new Date())));
+      setTo(isoDate(endOfMonth(new Date())));
+    }
+  }, [effectiveView, mode]);
 
   // Дни в окне (по локальной зоне)
   const days = useMemo(() => {
@@ -205,113 +242,157 @@ export function BookingsTimeline() {
         <div className="flex items-center justify-between flex-wrap gap-3">
           <CardTitle>Загрузка объектов</CardTitle>
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Переключатель режима */}
+            {/* Переключатель представления: авто / таблица / список */}
             <div className="inline-flex rounded-md border overflow-hidden text-sm">
               <button
                 type="button"
-                onClick={() => applyMode("days")}
+                onClick={() => setView("auto")}
                 className={cn(
                   "px-3 py-1.5",
-                  mode === "days" ? "bg-primary text-primary-foreground" : "bg-white hover:bg-slate-50",
+                  view === "auto" ? "bg-primary text-primary-foreground" : "bg-white hover:bg-slate-50",
                 )}
               >
-                По дням
+                Авто
               </button>
               <button
                 type="button"
-                onClick={() => applyMode("hours")}
+                onClick={() => setView("table")}
                 className={cn(
                   "px-3 py-1.5 border-l",
-                  mode === "hours" ? "bg-primary text-primary-foreground" : "bg-white hover:bg-slate-50",
+                  view === "table" ? "bg-primary text-primary-foreground" : "bg-white hover:bg-slate-50",
                 )}
               >
-                По часам
+                Таблица
+              </button>
+              <button
+                type="button"
+                onClick={() => setView("list")}
+                className={cn(
+                  "px-3 py-1.5 border-l",
+                  view === "list" ? "bg-primary text-primary-foreground" : "bg-white hover:bg-slate-50",
+                )}
+              >
+                Список
               </button>
             </div>
-            {/* Навигация по периоду */}
-            <div className="flex items-center gap-1">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  shiftPeriod(mode === "days" ? -days.length : -hours.length)
-                }
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </Button>
-              {mode === "days" ? (
-                <>
-                  <Button size="sm" variant="outline" onClick={() => setMonth(-1)}>
-                    Прошлый месяц
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={() => setMonth(0)}>
-                    Этот месяц
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={() => setMonth(1)}>
-                    Следующий
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      const t = todayLocal();
-                      setFrom(isoDate(t));
-                      setTo(isoDate(t));
-                    }}
-                  >
-                    Сегодня
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      const t = todayLocal();
-                      const tomorrow = new Date(t);
-                      tomorrow.setDate(t.getDate() + 1);
-                      setFrom(isoDate(t));
-                      setTo(isoDate(tomorrow));
-                    }}
-                  >
-                    Сегодня + завтра
-                  </Button>
-                </>
-              )}
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  shiftPeriod(mode === "days" ? days.length : hours.length)
-                }
-              >
-                <ChevronRight className="w-4 h-4" />
-              </Button>
-            </div>
+            {/* Переключатель режима «дни/часы» — в списке не нужен */}
+            {effectiveView !== "list" && (
+              <div className="inline-flex rounded-md border overflow-hidden text-sm">
+                <button
+                  type="button"
+                  onClick={() => applyMode("days")}
+                  className={cn(
+                    "px-3 py-1.5",
+                    mode === "days" ? "bg-primary text-primary-foreground" : "bg-white hover:bg-slate-50",
+                  )}
+                >
+                  По дням
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyMode("hours")}
+                  className={cn(
+                    "px-3 py-1.5 border-l",
+                    mode === "hours" ? "bg-primary text-primary-foreground" : "bg-white hover:bg-slate-50",
+                  )}
+                >
+                  По часам
+                </button>
+              </div>
+            )}
+            {/* Навигация по периоду — в списке заменяется простым выбором месяца */}
+            {effectiveView === "list" ? (
+              <MonthSelect from={from} onPick={setMonth} />
+            ) : (
+              <div className="flex items-center gap-1">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    shiftPeriod(mode === "days" ? -days.length : -hours.length)
+                  }
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+                {mode === "days" ? (
+                  <>
+                    <Button size="sm" variant="outline" onClick={() => setMonth(-1)}>
+                      Прошлый месяц
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => setMonth(0)}>
+                      Этот месяц
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => setMonth(1)}>
+                      Следующий
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        const t = todayLocal();
+                        setFrom(isoDate(t));
+                        setTo(isoDate(t));
+                      }}
+                    >
+                      Сегодня
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        const t = todayLocal();
+                        const tomorrow = new Date(t);
+                        tomorrow.setDate(t.getDate() + 1);
+                        setFrom(isoDate(t));
+                        setTo(isoDate(tomorrow));
+                      }}
+                    >
+                      Сегодня + завтра
+                    </Button>
+                  </>
+                )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    shiftPeriod(mode === "days" ? days.length : hours.length)
+                  }
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+              </div>
+            )}
           </div>
         </div>
         <div className="flex items-end gap-3 flex-wrap">
-          <div>
-            <Label className="text-xs">С</Label>
-            <Input
-              type="date"
-              value={from}
-              max={to}
-              onChange={(e) => setFrom(e.target.value)}
-              className="w-44"
-            />
-          </div>
-          <div>
-            <Label className="text-xs">По</Label>
-            <Input
-              type="date"
-              value={to}
-              min={from}
-              onChange={(e) => setTo(e.target.value)}
-              className="w-44"
-            />
-          </div>
+          {/* Инпуты дат «С/По» — в списке скрыты, период задаётся выбором месяца */}
+          {effectiveView !== "list" && (
+            <>
+              <div>
+                <Label className="text-xs">С</Label>
+                <Input
+                  type="date"
+                  value={from}
+                  max={to}
+                  onChange={(e) => setFrom(e.target.value)}
+                  className="w-44"
+                />
+              </div>
+              <div>
+                <Label className="text-xs">По</Label>
+                <Input
+                  type="date"
+                  value={to}
+                  min={from}
+                  onChange={(e) => setTo(e.target.value)}
+                  className="w-44"
+                />
+              </div>
+            </>
+          )}
           {/* Фильтры по категориям и видам объектов */}
           <div className="flex items-end gap-2 flex-wrap">
             <MultiSelectFilter
@@ -348,11 +429,14 @@ export function BookingsTimeline() {
               </Button>
             )}
           </div>
-          <div className="text-xs text-muted-foreground ml-auto flex items-center gap-3 flex-wrap">
-            <Legend color="bg-emerald-500" label="оплачено" />
-            <Legend color="bg-amber-400" label="ожидает оплаты" />
-            <Legend color="bg-slate-400" label="блокировка" />
-          </div>
+          {/* Легенда цветов — в списке не нужна (статусы видны на карточках) */}
+          {effectiveView !== "list" && (
+            <div className="text-xs text-muted-foreground ml-auto flex items-center gap-3 flex-wrap">
+              <Legend color="bg-emerald-500" label="оплачено" />
+              <Legend color="bg-amber-400" label="ожидает оплаты" />
+              <Legend color="bg-slate-400" label="блокировка" />
+            </div>
+          )}
         </div>
       </CardHeader>
       <CardContent className="p-0">
@@ -366,6 +450,14 @@ export function BookingsTimeline() {
                 ? "Нет почасовых типов объектов."
                 : "Объектов пока нет — добавьте через раздел «Объекты»."}
           </div>
+        ) : effectiveView === "list" ? (
+          <MobileDayList
+            days={days}
+            mode={mode}
+            visibleTypes={visibleTypes}
+            bookings={data.bookings}
+            blocks={data.blocks}
+          />
         ) : (
           <div className="flex border-t">
             {/* Левая колонка: типы и объекты */}
@@ -528,6 +620,267 @@ export function BookingsTimeline() {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+// Простой выбор месяца для списочного режима: один <select> вместо календаря,
+// стрелок и кнопок листания. onPick получает offset месяцев относительно текущего
+// (та же сигнатура, что и у setMonth в основном компоненте).
+function MonthSelect({
+  from,
+  onPick,
+}: {
+  from: string;
+  onPick: (offset: number) => void;
+}) {
+  // offset выбранного месяца относительно текущего — чтобы select отражал состояние.
+  const now = new Date();
+  const sel = new Date(`${from}T00:00:00`);
+  const selectedOffset =
+    (sel.getFullYear() - now.getFullYear()) * 12 + (sel.getMonth() - now.getMonth());
+
+  // Диапазон месяцев: 3 назад … 9 вперёд. Если текущий выбор (с десктопа) вне
+  // диапазона — добавляем его, чтобы select корректно его показал.
+  const offsets: number[] = [];
+  for (let o = -3; o <= 9; o++) offsets.push(o);
+  if (!offsets.includes(selectedOffset)) {
+    offsets.push(selectedOffset);
+    offsets.sort((a, b) => a - b);
+  }
+
+  return (
+    <select
+      value={selectedOffset}
+      onChange={(e) => onPick(Number(e.target.value))}
+      className="h-9 rounded-md border border-input bg-white px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      {offsets.map((o) => {
+        const d = new Date(now.getFullYear(), now.getMonth() + o, 1);
+        const label = d.toLocaleDateString("ru-RU", { month: "long", year: "numeric" });
+        return (
+          <option key={o} value={o}>
+            {label[0].toUpperCase() + label.slice(1)}
+            {o === 0 ? " (текущий)" : ""}
+          </option>
+        );
+      })}
+    </select>
+  );
+}
+
+// Границы дня d в UTC-миллисекундах. d — локальная полночь (из массива days),
+// поэтому d.getTime() уже соответствует нужному UTC-моменту начала дня — так же,
+// как leftPxFor выше считает позицию от new Date(`${from}T00:00:00`).getTime().
+function localDayBounds(d: Date): { startUtc: number; endUtc: number } {
+  const startUtc = d.getTime();
+  return { startUtc, endUtc: startUtc + DAY_MS };
+}
+
+// Попадает ли UTC-момент aMs в тот же календарный день, что и граница startUtc
+// (startUtc — локальная полночь дня). Сравниваем по окну [startUtc, startUtc+DAY).
+function isSameDayWindow(aMs: number, startUtc: number): boolean {
+  return aMs >= startUtc && aMs < startUtc + DAY_MS;
+}
+
+type DayRole = "checkin" | "during" | "checkout" | "single";
+
+const ROLE_LABEL: Record<DayRole, string> = {
+  checkin: "заезд",
+  during: "проживание",
+  checkout: "выезд",
+  single: "весь день",
+};
+
+function timeLocal(iso: string): string {
+  const d = new Date(iso);
+  const local = new Date(d.getTime() + TZ_OFFSET_MIN * 60_000);
+  return `${String(local.getUTCHours()).padStart(2, "0")}:${String(local.getUTCMinutes()).padStart(2, "0")}`;
+}
+
+function MobileDayList({
+  days,
+  mode,
+  visibleTypes,
+  bookings,
+  blocks,
+}: {
+  days: Date[];
+  mode: Mode;
+  visibleTypes: TypeRow[];
+  bookings: BookingItem[];
+  blocks: BlockItem[];
+}) {
+  const [expanded, setExpanded] = useState<Set<string>>(() => {
+    // По умолчанию раскрываем сегодняшний день, если он в окне.
+    const todayKey = dayKey(todayLocal());
+    return new Set(days.some((d) => dayKey(d) === todayKey) ? [todayKey] : []);
+  });
+
+  function toggle(key: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  // Имя объекта по id (для подписи в карточке).
+  const objName = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const t of visibleTypes) for (const o of t.objects) m.set(o.id, o.name);
+    return m;
+  }, [visibleTypes]);
+
+  // Множество id объектов, попавших под фильтры (брони/блоки чужих объектов скрываем).
+  const visibleObjIds = useMemo(() => {
+    const s = new Set<string>();
+    for (const t of visibleTypes) for (const o of t.objects) s.add(o.id);
+    return s;
+  }, [visibleTypes]);
+
+  return (
+    <div className="divide-y border-t">
+      {days.map((d) => {
+        const { startUtc, endUtc } = localDayBounds(d);
+        // Брони, перекрывающие этот день по [startAt, endAt] включительно
+        // (день выезда тоже показываем).
+        const dayBookings = bookings.filter((b) => {
+          if (!visibleObjIds.has(b.objectId)) return false;
+          const s = new Date(b.startAt).getTime();
+          const e = new Date(b.endAt).getTime();
+          return s < endUtc && e > startUtc;
+        });
+        const dayBlocks = blocks.filter((b) => {
+          if (!visibleObjIds.has(b.objectId)) return false;
+          const s = new Date(b.startAt).getTime();
+          const e = new Date(b.endAt).getTime();
+          return s < endUtc && e > startUtc;
+        });
+        const count = dayBookings.length + dayBlocks.length;
+        const isToday = dayKey(d) === dayKey(todayLocal());
+        const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+        const key = dayKey(d);
+        const isOpen = expanded.has(key);
+
+        return (
+          <div key={key}>
+            <button
+              type="button"
+              onClick={() => toggle(key)}
+              className={cn(
+                "w-full flex items-center gap-3 px-4 py-3 text-left",
+                isToday && "bg-amber-50",
+              )}
+            >
+              <div className="flex flex-col items-center justify-center w-12 shrink-0">
+                <span
+                  className={cn(
+                    "text-lg font-semibold leading-none",
+                    isWeekend && "text-rose-600",
+                    isToday && "text-amber-700",
+                  )}
+                >
+                  {d.getDate()}
+                </span>
+                <span className="text-[11px] text-muted-foreground uppercase">
+                  {WEEKDAYS[d.getDay()]}
+                </span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium">
+                  {d.toLocaleDateString("ru-RU", { day: "numeric", month: "long" })}
+                </div>
+                {count === 0 ? (
+                  <span className="inline-block mt-0.5 text-xs rounded px-1.5 py-0.5 bg-emerald-50 text-emerald-700">
+                    свободно
+                  </span>
+                ) : (
+                  <div className="text-xs text-muted-foreground">
+                    {dayBookings.length > 0 && `${dayBookings.length} ${plural(dayBookings.length, ["бронь", "брони", "броней"])}`}
+                    {dayBookings.length > 0 && dayBlocks.length > 0 && " · "}
+                    {dayBlocks.length > 0 && `${dayBlocks.length} ${plural(dayBlocks.length, ["блокировка", "блокировки", "блокировок"])}`}
+                  </div>
+                )}
+              </div>
+              <ChevronDown
+                className={cn(
+                  "w-5 h-5 shrink-0 text-muted-foreground transition-transform",
+                  isOpen && "rotate-180",
+                )}
+              />
+            </button>
+
+            {isOpen && count > 0 && (
+              <div className="px-4 pb-3 space-y-2 bg-slate-50/60">
+                {dayBlocks.map((b) => (
+                  <div
+                    key={b.id}
+                    className="flex items-center gap-2 rounded-md border bg-white p-2.5 text-sm"
+                  >
+                    <span className="w-2 h-2 rounded-full bg-slate-400 shrink-0" />
+                    <span className="font-medium truncate">{objName.get(b.objectId) ?? "Объект"}</span>
+                    <span className="text-muted-foreground truncate">
+                      · блокировка{b.reason ? `: ${b.reason}` : ""}
+                    </span>
+                  </div>
+                ))}
+                {dayBookings.map((b) => {
+                  const startMs = new Date(b.startAt).getTime();
+                  const endMs = new Date(b.endAt).getTime();
+                  const isCheckIn = isSameDayWindow(startMs, startUtc);
+                  const isCheckOut = isSameDayWindow(endMs, startUtc);
+                  let role: DayRole;
+                  if (mode === "hours") role = "single";
+                  else if (isCheckIn && isCheckOut) role = "single";
+                  else if (isCheckIn) role = "checkin";
+                  else if (isCheckOut) role = "checkout";
+                  else role = "during";
+                  const paid = b.status === "PAID";
+                  return (
+                    <Link
+                      key={b.id}
+                      href={`/admin/bookings/${b.id}`}
+                      className="flex items-start gap-2 rounded-md border bg-white p-2.5 text-sm hover:bg-slate-50 transition-colors"
+                    >
+                      <span
+                        className={cn(
+                          "w-2 h-2 rounded-full shrink-0 mt-1.5",
+                          paid ? "bg-emerald-500" : "bg-amber-500",
+                        )}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-medium truncate">
+                            {objName.get(b.objectId) ?? "Объект"}
+                          </span>
+                          <span
+                            className={cn(
+                              "text-[11px] rounded px-1.5 py-0.5",
+                              role === "checkin" && "bg-emerald-50 text-emerald-700",
+                              role === "checkout" && "bg-rose-50 text-rose-600",
+                              role === "during" && "bg-slate-100 text-slate-600",
+                              role === "single" && "bg-slate-100 text-slate-600",
+                            )}
+                          >
+                            {mode === "hours"
+                              ? `${timeLocal(b.startAt)}–${timeLocal(b.endAt)}`
+                              : ROLE_LABEL[role]}
+                          </span>
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-0.5">
+                          {b.publicCode} · {b.guestName} · {b.guestsCount} гост. · {b.totalPrice} ₽
+                        </div>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 

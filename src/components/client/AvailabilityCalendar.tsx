@@ -77,6 +77,18 @@ export function AvailabilityCalendar({
   };
   const isBooked = (d: Date) => occupied.has(dateKey(d));
   const isDisabled = (d: Date) => isPast(d) || isBooked(d);
+  // День внутри выбранного диапазона [from, to] — чтобы зелёная заливка
+  // «available» не перебивала фон выделения range_middle/range_end.
+  const isInRange = (d: Date) => {
+    if (!range?.from) return false;
+    const t = d.getTime();
+    const from = range.from.getTime();
+    const to = (range.to ?? range.from).getTime();
+    return t >= from && t <= to;
+  };
+  // Свободный день: не прошёл, не занят и не входит в выбранный диапазон —
+  // помечаем зелёным.
+  const isAvailable = (d: Date) => !isPast(d) && !isBooked(d) && !isInRange(d);
 
   function sameDay(a: Date, b: Date) {
     return (
@@ -114,10 +126,11 @@ export function AvailabilityCalendar({
           // Отдельные модификаторы, чтобы развести стили: «прошлое» — серым,
           // «занято» — красным. Сами по себе модификаторы клик не блокируют,
           // disabled выше отвечает за это.
-          modifiers={{ booked: isBooked, past: isPast }}
+          modifiers={{ booked: isBooked, past: isPast, available: isAvailable }}
           modifiersClassNames={{
             booked: "bg-red-100 text-red-700 line-through",
             past: "text-muted-foreground line-through opacity-50",
+            available: "bg-emerald-50 text-emerald-700 hover:bg-emerald-100",
           }}
           // excludeDisabled: если новый диапазон перекрывает занятый день —
           // DayPicker сам сбрасывает «to» и оставляет триггер-дату как «from»,
@@ -132,6 +145,9 @@ export function AvailabilityCalendar({
       <div className="mt-4 flex flex-wrap gap-3 text-xs text-muted-foreground">
         <span className="flex items-center gap-1">
           <span className="inline-block w-3 h-3 rounded-sm bg-[hsl(var(--primary))]" /> выбрано
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="inline-block w-3 h-3 rounded-sm bg-emerald-50 border border-emerald-200" /> свободно
         </span>
         <span className="flex items-center gap-1">
           <span className="inline-block w-3 h-3 rounded-sm bg-red-100" /> занято
@@ -204,6 +220,8 @@ export function SingleDayPicker({
     return occupied.has(dateKey(d));
   };
   const isDisabled = (d: Date) => isPast(d) || isBooked(d);
+  // Свободный день: не прошёл и не занят — помечаем зелёным.
+  const isAvailable = (d: Date) => !isPast(d) && !isBooked(d);
 
   return (
     <div>
@@ -213,10 +231,11 @@ export function SingleDayPicker({
           selected={selected}
           onSelect={onChange}
           disabled={isDisabled}
-          modifiers={{ booked: isBooked, past: isPast }}
+          modifiers={{ booked: isBooked, past: isPast, available: isAvailable }}
           modifiersClassNames={{
             booked: "bg-red-100 text-red-700 line-through",
             past: "text-muted-foreground line-through opacity-50",
+            available: "bg-emerald-50 text-emerald-700 hover:bg-emerald-100",
           }}
           locale={ru}
           weekStartsOn={1}
@@ -227,6 +246,9 @@ export function SingleDayPicker({
       <div className="mt-4 flex flex-wrap gap-3 text-xs text-muted-foreground">
         <span className="flex items-center gap-1">
           <span className="inline-block w-3 h-3 rounded-sm bg-[hsl(var(--primary))]" /> выбрано
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="inline-block w-3 h-3 rounded-sm bg-emerald-50 border border-emerald-200" /> свободно
         </span>
         <span className="flex items-center gap-1">
           <span className="inline-block w-3 h-3 rounded-sm bg-red-100" /> занято

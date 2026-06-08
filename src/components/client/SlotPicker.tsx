@@ -98,6 +98,18 @@ export function SlotPicker({
             t.setHours(0, 0, 0, 0);
             return d.getTime() < t.getTime() - DAY_MS;
           }}
+          // Будущие дни (доступные для выбора) подсвечиваем зелёным; занятость
+          // конкретных слотов внутри дня показываем ниже на карточках.
+          modifiers={{
+            available: (d) => {
+              const t = new Date();
+              t.setHours(0, 0, 0, 0);
+              return d.getTime() >= t.getTime() - DAY_MS;
+            },
+          }}
+          modifiersClassNames={{
+            available: "text-emerald-700 hover:bg-emerald-50",
+          }}
           locale={ru}
           weekStartsOn={1}
           showOutsideDays={false}
@@ -126,7 +138,7 @@ export function SlotPicker({
                     "text-left p-3 rounded-md border transition-colors",
                     past && "bg-slate-100 text-muted-foreground cursor-not-allowed",
                     !past && occ && "bg-rose-50 text-rose-500 border-rose-200 line-through cursor-not-allowed",
-                    !past && !occ && !selected && "bg-white hover:bg-slate-50 border-slate-200",
+                    !past && !occ && !selected && "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-200",
                     !past && !occ && selected && "bg-primary text-primary-foreground border-primary",
                   )}
                 >
@@ -141,6 +153,19 @@ export function SlotPicker({
                 </button>
               );
             })}
+          </div>
+        )}
+        {selectedDate && slots.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-3 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1">
+              <span className="inline-block w-3 h-3 rounded-sm bg-emerald-50 border border-emerald-200" /> свободно
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="inline-block w-3 h-3 rounded-sm bg-rose-50 border border-rose-200" /> занято
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="inline-block w-3 h-3 rounded-sm bg-primary" /> выбрано
+            </span>
           </div>
         )}
       </div>

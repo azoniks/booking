@@ -209,7 +209,10 @@ export function BookingForm({
   const [paymentPercent, setPaymentPercent] = useState(100);
   const [paymentType, setPaymentType] = useState<"PERCENT" | "FIXED">("PERCENT");
   const [paymentAmount, setPaymentAmount] = useState<number | null>(null);
-  const [loadingBusy, setLoadingBusy] = useState(false);
+  // Стартуем с true: до завершения загрузки слотов нельзя решить, какой пикер
+  // показать в HOURLY-режиме (почасовой или слотовый). Иначе первый кадр всегда
+  // почасовой, а после fetch подменяется на слотовый — заметное «мигание».
+  const [loadingBusy, setLoadingBusy] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -667,6 +670,20 @@ export function BookingForm({
               <p className="text-xs text-muted-foreground mt-2">
                 Заезд {object.checkInTime}, выезд {object.checkOutTime}
               </p>
+            </div>
+          ) : !isDaily && !isFullDay && loadingBusy ? (
+            // HOURLY: пока не загрузили slots, нельзя выбрать почасовой/слотовый
+            // пикер — показываем скелетон вместо «мигающего» почасового.
+            <div>
+              <Label className="mb-2 block">Дата и время</Label>
+              <div className="space-y-3" aria-hidden>
+                <div className="h-64 rounded-md bg-muted/40 animate-pulse" />
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <div key={i} className="h-9 rounded-md bg-muted/40 animate-pulse" />
+                  ))}
+                </div>
+              </div>
             </div>
           ) : useSlots ? (
             <div>
