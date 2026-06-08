@@ -505,7 +505,7 @@ function ObjectSearchPicker({
   const displayValue =
     open || !selected
       ? query
-      : `${selected.categoryName} → ${selected.typeName} → ${selected.name}`;
+      : `${selected.name} · ${selected.categoryName} → ${selected.typeName}`;
 
   return (
     <div ref={wrapRef} className="relative">
@@ -588,10 +588,11 @@ function ObjectSearchPicker({
                 } ${o.id === value ? "font-medium" : ""}`}
               >
                 <span className="truncate">
-                  <span className="text-muted-foreground">
-                    {o.categoryName} → {o.typeName} →
-                  </span>{" "}
                   {o.name}
+                  <span className="text-muted-foreground">
+                    {" "}
+                    · {o.categoryName} → {o.typeName}
+                  </span>
                 </span>
                 <Badge variant="outline" className="shrink-0 text-[10px] font-normal">
                   {modeLabel(o.bookingMode)}
