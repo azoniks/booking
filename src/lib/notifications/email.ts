@@ -492,6 +492,7 @@ export async function sendStatusChangeNotifications(bookingId: string, newStatus
   });
   if (!b) return;
   const titles: Record<string, string> = {
+    PREPAID: "ожидает доплаты (аванс получен)",
     PAID: "подтверждена",
     CANCELLED: "отменена",
     COMPLETED: "завершена",

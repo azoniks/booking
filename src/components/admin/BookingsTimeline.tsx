@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
+import { cn, formatRub } from "@/lib/utils";
 import { AdminBookingCreateForm } from "./AdminBookingCreateForm";
 import { AdminGroupCreateFormSheet } from "./AdminGroupCreateFormSheet";
 
@@ -26,8 +27,71 @@ type TypeRow = {
   categoryName: string;
   bookingMode: "DAILY" | "HOURLY" | "FULL_DAY";
   cleaningMinutes: number;
+  baseCapacity: number;
+  basePrice: number;
   objects: ObjectRow[];
 };
+
+// Сортировка строк-объектов в шахматке. Вместимость и цена задаются на типе,
+// поэтому по ним сортируются группы типов; объекты внутри — по имени.
+type TimelineSort =
+  | "default"
+  | "name-asc"
+  | "name-desc"
+  | "cap-desc"
+  | "cap-asc"
+  | "price-desc"
+  | "price-asc";
+
+const TIMELINE_SORT_OPTIONS: { value: TimelineSort; label: string }[] = [
+  { value: "default", label: "По умолчанию (категория)" },
+  { value: "name-asc", label: "Название: А–Я" },
+  { value: "name-desc", label: "Название: Я–А" },
+  { value: "cap-desc", label: "Вместимость: больше → меньше" },
+  { value: "cap-asc", label: "Вместимость: меньше → больше" },
+  { value: "price-desc", label: "Цена: больше → меньше" },
+  { value: "price-asc", label: "Цена: меньше → больше" },
+];
+
+function cmpRu(a: string, b: string): number {
+  return a.localeCompare(b, "ru", { numeric: true, sensitivity: "base" });
+}
+
+// Возвращает отсортированный список типов с отсортированными объектами внутри.
+function sortTimelineTypes(types: TypeRow[], sort: TimelineSort): TypeRow[] {
+  if (sort === "default") return types;
+  const withObjects = types.map((t) => {
+    const objects = [...t.objects];
+    if (sort === "name-desc") objects.sort((a, b) => cmpRu(b.name, a.name));
+    else objects.sort((a, b) => cmpRu(a.name, b.name));
+    return { ...t, objects };
+  });
+  const typeName = (t: TypeRow) => `${t.categoryName} · ${t.name}`;
+  switch (sort) {
+    case "name-asc":
+      return withObjects.sort((a, b) => cmpRu(typeName(a), typeName(b)));
+    case "name-desc":
+      return withObjects.sort((a, b) => cmpRu(typeName(b), typeName(a)));
+    case "cap-desc":
+      return withObjects.sort(
+        (a, b) => b.baseCapacity - a.baseCapacity || cmpRu(typeName(a), typeName(b)),
+      );
+    case "cap-asc":
+      return withObjects.sort(
+        (a, b) => a.baseCapacity - b.baseCapacity || cmpRu(typeName(a), typeName(b)),
+      );
+    case "price-desc":
+      return withObjects.sort(
+        (a, b) => b.basePrice - a.basePrice || cmpRu(typeName(a), typeName(b)),
+      );
+    case "price-asc":
+      return withObjects.sort(
+        (a, b) => a.basePrice - b.basePrice || cmpRu(typeName(a), typeName(b)),
+      );
+    default:
+      return withObjects;
+  }
+}
 type BookingItem = {
   id: string;
   publicCode: string;
@@ -35,11 +99,14 @@ type BookingItem = {
   startAt: string;
   endAt: string;
   blockedUntil: string;
-  status: "PENDING" | "PAID" | string;
+  status: "PENDING" | "PREPAID" | "PAID" | string;
   guestName: string;
   guestPhone: string;
+  guestComment: string | null;
   guestsCount: number;
   totalPrice: string;
+  groupId: string | null;
+  group: { publicCode: string; status: string; totalPrice: string } | null;
 };
 type BlockItem = {
   id: string;
@@ -96,6 +163,7 @@ export function BookingsTimeline({
   const [to, setTo] = useState(() => isoDate(endOfMonth(new Date())));
   const [selectedCats, setSelectedCats] = useState<string[]>([]);
   const [selectedTypeIds, setSelectedTypeIds] = useState<string[]>([]);
+  const [sort, setSort] = useState<TimelineSort>("default");
   const [data, setData] = useState<{
     types: TypeRow[];
     bookings: BookingItem[];
@@ -240,12 +308,13 @@ export function BookingsTimeline({
   }, [baseTypes, selectedCats]);
 
   // Итоговый список строк с применёнными фильтрами (категория И вид — через AND)
+  // и выбранной сортировкой.
   const visibleTypes = useMemo(() => {
     let result = baseTypes;
     if (selectedCats.length > 0) result = result.filter((t) => selectedCats.includes(t.categoryId));
     if (selectedTypeIds.length > 0) result = result.filter((t) => selectedTypeIds.includes(t.id));
-    return result;
-  }, [baseTypes, selectedCats, selectedTypeIds]);
+    return sortTimelineTypes(result, sort);
+  }, [baseTypes, selectedCats, selectedTypeIds, sort]);
 
   const filtersActive = selectedCats.length > 0 || selectedTypeIds.length > 0;
 
@@ -406,6 +475,21 @@ export function BookingsTimeline({
               </div>
             </>
           )}
+          {/* Сортировка строк-объектов — доступна и в списочном режиме на мобиле */}
+          <div>
+            <Label className="text-xs">Сортировка</Label>
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value as TimelineSort)}
+              className="h-9 w-full sm:w-auto rounded-md border border-input bg-white px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {TIMELINE_SORT_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </div>
           {/* Фильтры по категориям и видам объектов — на мобиле скрыты */}
           <div className="hidden sm:flex items-end gap-2 flex-wrap">
             <MultiSelectFilter
@@ -446,6 +530,7 @@ export function BookingsTimeline({
           {effectiveView !== "list" && (
             <div className="text-xs text-muted-foreground ml-auto flex items-center gap-3 flex-wrap">
               <Legend color="bg-emerald-500" label="оплачено" />
+              <Legend color="bg-blue-500" label="аванс внесён" />
               <Legend color="bg-amber-400" label="ожидает оплаты" />
               <Legend color="bg-slate-400" label="блокировка" />
             </div>
@@ -712,6 +797,185 @@ function timeLocal(iso: string): string {
   return `${String(local.getUTCHours()).padStart(2, "0")}:${String(local.getUTCMinutes()).padStart(2, "0")}`;
 }
 
+// Блок списка дня: брони одного заказа вместе, остальные — по одной.
+type DayBlock =
+  | { kind: "single"; booking: BookingItem }
+  | { kind: "group"; groupId: string; bookings: BookingItem[] };
+
+// Группируем брони дня по заказам (порядок сохраняется по первой встрече).
+function groupDayBookings(items: BookingItem[]): DayBlock[] {
+  const blocks: DayBlock[] = [];
+  const pos = new Map<string, number>();
+  for (const b of items) {
+    if (b.groupId) {
+      const idx = pos.get(b.groupId);
+      if (idx === undefined) {
+        pos.set(b.groupId, blocks.length);
+        blocks.push({ kind: "group", groupId: b.groupId, bookings: [b] });
+      } else {
+        (blocks[idx] as Extract<DayBlock, { kind: "group" }>).bookings.push(b);
+      }
+    } else {
+      blocks.push({ kind: "single", booking: b });
+    }
+  }
+  return blocks;
+}
+
+function computeDayRole(b: BookingItem, startUtc: number, mode: Mode): DayRole {
+  if (mode === "hours") return "single";
+  const isCheckIn = isSameDayWindow(new Date(b.startAt).getTime(), startUtc);
+  const isCheckOut = isSameDayWindow(new Date(b.endAt).getTime(), startUtc);
+  if (isCheckIn && isCheckOut) return "single";
+  if (isCheckIn) return "checkin";
+  if (isCheckOut) return "checkout";
+  return "during";
+}
+
+const PAY_BADGE: Record<
+  string,
+  { label: string; variant: "secondary" | "destructive" | "outline" | "success" | "successSolid" | "warning" | "info" }
+> = {
+  PENDING: { label: "Ожидает оплаты", variant: "warning" },
+  PREPAID: { label: "Аванс внесён", variant: "info" },
+  PAID: { label: "Оплачено", variant: "successSolid" },
+  CANCELLED: { label: "Отменено", variant: "destructive" },
+  COMPLETED: { label: "Завершено", variant: "success" },
+  NO_SHOW: { label: "Не пришёл", variant: "destructive" },
+};
+
+function PayBadge({ status }: { status: string }) {
+  const cfg = PAY_BADGE[status] || { label: status, variant: "secondary" as const };
+  return <Badge variant={cfg.variant}>{cfg.label}</Badge>;
+}
+
+// Карточка одной брони в списке дня. inGroup — компактный вид внутри блока заказа
+// (статус/гость/комментарий показываются на уровне заказа).
+function DayBookingRow({
+  b,
+  objectName,
+  startUtc,
+  mode,
+  inGroup = false,
+}: {
+  b: BookingItem;
+  objectName: string;
+  startUtc: number;
+  mode: Mode;
+  inGroup?: boolean;
+}) {
+  const role = computeDayRole(b, startUtc, mode);
+  const paid = b.status === "PAID";
+  const prepaid = b.status === "PREPAID";
+  return (
+    <Link
+      href={`/admin/bookings/${b.id}`}
+      className="flex items-start gap-2 rounded-md border bg-white p-2.5 text-sm hover:bg-slate-50 transition-colors"
+    >
+      <span
+        className={cn(
+          "w-2 h-2 rounded-full shrink-0 mt-1.5",
+          inGroup
+            ? "bg-slate-300"
+            : paid
+              ? "bg-emerald-500"
+              : prepaid
+                ? "bg-blue-500"
+                : "bg-amber-500",
+        )}
+      />
+      <div className="min-w-0 flex-1 space-y-1">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-medium truncate">{objectName}</span>
+          <span className="font-mono text-xs text-muted-foreground">{b.publicCode}</span>
+          <span
+            className={cn(
+              "text-[11px] rounded px-1.5 py-0.5",
+              role === "checkin" && "bg-emerald-50 text-emerald-700",
+              role === "checkout" && "bg-rose-50 text-rose-600",
+              (role === "during" || role === "single") && "bg-slate-100 text-slate-600",
+            )}
+          >
+            {mode === "hours"
+              ? `${timeLocal(b.startAt)}–${timeLocal(b.endAt)}`
+              : ROLE_LABEL[role]}
+          </span>
+          <span className="ml-auto font-medium shrink-0">{formatRub(b.totalPrice)}</span>
+        </div>
+        <div className="text-xs text-muted-foreground">
+          Заезд: {formatLocal(b.startAt)} · Выезд: {formatLocal(b.endAt)}
+        </div>
+        {inGroup ? (
+          <div className="text-xs text-muted-foreground">{b.guestsCount} гост.</div>
+        ) : (
+          <>
+            <div className="flex items-center gap-1.5 flex-wrap text-xs text-muted-foreground">
+              Статус оплаты: <PayBadge status={b.status} />
+            </div>
+            <div className="text-xs text-muted-foreground">
+              Гость: {b.guestName} · {b.guestsCount} гост.
+            </div>
+            {b.guestComment && (
+              <div className="text-xs text-muted-foreground">
+                Комментарий: <span className="italic">«{b.guestComment}»</span>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </Link>
+  );
+}
+
+// Блок группового заказа в списке дня: шапка с кодом, статусом оплаты и суммой
+// заказа, затем входящие в него брони этого дня.
+function DayGroupBlock({
+  bookings,
+  objName,
+  startUtc,
+  mode,
+}: {
+  bookings: BookingItem[];
+  objName: Map<string, string>;
+  startUtc: number;
+  mode: Mode;
+}) {
+  const g = bookings[0].group;
+  const guestName = bookings[0].guestName;
+  const comment = bookings.find((b) => b.guestComment)?.guestComment ?? null;
+  return (
+    <div className="rounded-md border border-primary/40 bg-primary/[0.03] p-2.5 space-y-2">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap min-w-0">
+          <Badge variant="secondary">Заказ</Badge>
+          {g && <span className="font-mono text-xs font-semibold">{g.publicCode}</span>}
+          {g && <PayBadge status={g.status} />}
+          <span className="text-xs text-muted-foreground">{bookings.length} объ.</span>
+        </div>
+        {g && <span className="text-sm font-semibold">{formatRub(g.totalPrice)}</span>}
+      </div>
+      <div className="text-xs text-muted-foreground">Гость: {guestName}</div>
+      {comment && (
+        <div className="text-xs text-muted-foreground">
+          Комментарий: <span className="italic">«{comment}»</span>
+        </div>
+      )}
+      <div className="space-y-1.5">
+        {bookings.map((b) => (
+          <DayBookingRow
+            key={b.id}
+            b={b}
+            objectName={objName.get(b.objectId) ?? "Объект"}
+            startUtc={startUtc}
+            mode={mode}
+            inGroup
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function MobileDayList({
   days,
   mode,
@@ -897,56 +1161,25 @@ function MobileDayList({
                     </span>
                   </div>
                 ))}
-                {dayBookings.map((b) => {
-                  const startMs = new Date(b.startAt).getTime();
-                  const endMs = new Date(b.endAt).getTime();
-                  const isCheckIn = isSameDayWindow(startMs, startUtc);
-                  const isCheckOut = isSameDayWindow(endMs, startUtc);
-                  let role: DayRole;
-                  if (mode === "hours") role = "single";
-                  else if (isCheckIn && isCheckOut) role = "single";
-                  else if (isCheckIn) role = "checkin";
-                  else if (isCheckOut) role = "checkout";
-                  else role = "during";
-                  const paid = b.status === "PAID";
-                  return (
-                    <Link
-                      key={b.id}
-                      href={`/admin/bookings/${b.id}`}
-                      className="flex items-start gap-2 rounded-md border bg-white p-2.5 text-sm hover:bg-slate-50 transition-colors"
-                    >
-                      <span
-                        className={cn(
-                          "w-2 h-2 rounded-full shrink-0 mt-1.5",
-                          paid ? "bg-emerald-500" : "bg-amber-500",
-                        )}
-                      />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-medium truncate">
-                            {objName.get(b.objectId) ?? "Объект"}
-                          </span>
-                          <span
-                            className={cn(
-                              "text-[11px] rounded px-1.5 py-0.5",
-                              role === "checkin" && "bg-emerald-50 text-emerald-700",
-                              role === "checkout" && "bg-rose-50 text-rose-600",
-                              role === "during" && "bg-slate-100 text-slate-600",
-                              role === "single" && "bg-slate-100 text-slate-600",
-                            )}
-                          >
-                            {mode === "hours"
-                              ? `${timeLocal(b.startAt)}–${timeLocal(b.endAt)}`
-                              : ROLE_LABEL[role]}
-                          </span>
-                        </div>
-                        <div className="text-xs text-muted-foreground mt-0.5">
-                          {b.publicCode} · {b.guestName} · {b.guestsCount} гост. · {b.totalPrice} ₽
-                        </div>
-                      </div>
-                    </Link>
-                  );
-                })}
+                {groupDayBookings(dayBookings).map((blk) =>
+                  blk.kind === "group" ? (
+                    <DayGroupBlock
+                      key={blk.groupId}
+                      bookings={blk.bookings}
+                      objName={objName}
+                      startUtc={startUtc}
+                      mode={mode}
+                    />
+                  ) : (
+                    <DayBookingRow
+                      key={blk.booking.id}
+                      b={blk.booking}
+                      objectName={objName.get(blk.booking.objectId) ?? "Объект"}
+                      startUtc={startUtc}
+                      mode={mode}
+                    />
+                  ),
+                )}
               </div>
             )}
           </div>
@@ -1059,6 +1292,7 @@ function BarBooking({
   left: number;
   width: number;
 }) {
+  const prepaid = booking.status === "PREPAID";
   const paid = booking.status === "PAID";
   const tooltip = `${booking.publicCode} · ${booking.guestName} · ${booking.guestsCount} гост. · ${booking.totalPrice} ₽\n${formatLocal(booking.startAt)} — ${formatLocal(booking.endAt)}`;
   return (
@@ -1067,7 +1301,7 @@ function BarBooking({
       title={tooltip}
       className={cn(
         "absolute top-1.5 bottom-1.5 rounded-md text-white text-[11px] px-1.5 truncate flex items-center gap-1 cursor-pointer hover:brightness-110 transition-[filter] shadow-sm",
-        paid ? "bg-emerald-500" : "bg-amber-500",
+        paid ? "bg-emerald-500" : prepaid ? "bg-blue-500" : "bg-amber-500",
       )}
       style={{ left, width }}
     >

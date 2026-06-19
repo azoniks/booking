@@ -14,6 +14,8 @@ import {
   GroupRefundButton,
   GroupCancelButton,
   GroupDeleteButton,
+  GroupMarkPrepaidButton,
+  GroupMarkPaidButton,
 } from "@/components/admin/BookingGroupActions";
 import { AdminBookingEditForm } from "@/components/admin/AdminBookingEditForm";
 import { BookingNotificationsTable } from "@/components/admin/BookingNotificationsTable";
@@ -25,12 +27,31 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
   const b = await prisma.booking.findUnique({
     where: { id },
     include: {
-      object: { include: { objectType: { include: { category: true } } } },
+      object: {
+        include: {
+          objectType: {
+            include: {
+              category: true,
+              slots: { orderBy: [{ sortOrder: "asc" }, { startTime: "asc" }] },
+            },
+          },
+        },
+      },
       payment: true,
       notifications: { orderBy: { sentAt: "desc" } },
     },
   });
   if (!b) notFound();
+
+  // Префилл полей расписания для формы редактирования (локальные строки).
+  const initialSchedule = {
+    checkInDate: formatLocal(b.startAt, "yyyy-MM-dd"),
+    checkOutDate: formatLocal(b.endAt, "yyyy-MM-dd"),
+    bookingDate: formatLocal(b.startAt, "yyyy-MM-dd"),
+    slotDate: formatLocal(b.startAt, "yyyy-MM-dd"),
+    startAt: formatLocal(b.startAt, "yyyy-MM-dd'T'HH:mm"),
+    endAt: formatLocal(b.endAt, "yyyy-MM-dd'T'HH:mm"),
+  };
 
   // Если бронь входит в групповой заказ — подгружаем заказ и связанные брони.
   const group = b.groupId
@@ -48,10 +69,10 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
 
   return (
     <div className="space-y-4">
-      <Link href="/admin/bookings" className="text-sm text-muted-foreground hover:underline">
+      <Link href="/admin/bookings" className="text-sm text-muted-foreground hover:underline px-4 md:px-6">
         ← Все брони
       </Link>
-      <div className="flex items-center gap-3 flex-wrap">
+      <div className="flex items-center gap-3 flex-wrap px-4 md:px-6">
         <h1 className="text-2xl font-bold">Бронь {b.publicCode}</h1>
         {/* Для броней в составе заказа статус показываем только у заказа
             (оплата всё-или-ничего на уровне группы). */}
@@ -67,6 +88,17 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
               guestsCount: b.guestsCount,
             }}
             maxCapacity={b.object.objectType.maxCapacity}
+            bookingMode={b.object.objectType.category.bookingMode}
+            checkInTime={b.object.objectType.checkInTime}
+            checkOutTime={b.object.objectType.checkOutTime}
+            slots={b.object.objectType.slots.map((s) => ({
+              id: s.id,
+              name: s.name,
+              startTime: s.startTime,
+              endTime: s.endTime,
+              endDayOffset: s.endDayOffset,
+            }))}
+            initialSchedule={initialSchedule}
           />
         </div>
       </div>
@@ -126,8 +158,12 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
               )}
             </div>
 
-            {group.status !== "CANCELLED" && (
+            {group.status !== "CANCELLED" && group.status !== "COMPLETED" && (
               <div className="flex flex-wrap gap-2">
+                {group.status === "PENDING" && <GroupMarkPrepaidButton id={group.id} />}
+                {(group.status === "PENDING" || group.status === "PREPAID") && (
+                  <GroupMarkPaidButton id={group.id} />
+                )}
                 {group.payment?.status === "SUCCEEDED" ? (
                   <GroupRefundButton id={group.id} amount={formatRub(group.payment.amount.toString())} />
                 ) : (
@@ -243,11 +279,12 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const map: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" | "success" | "warning" }> = {
+  const map: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" | "success" | "successSolid" | "warning" | "info" }> = {
     PENDING: { label: "Ожидает", variant: "warning" },
-    PAID: { label: "Оплачено", variant: "success" },
+    PREPAID: { label: "Аванс внесён", variant: "info" },
+    PAID: { label: "Оплачено", variant: "successSolid" },
     CANCELLED: { label: "Отменено", variant: "destructive" },
-    COMPLETED: { label: "Завершено", variant: "outline" },
+    COMPLETED: { label: "Завершено", variant: "success" },
     NO_SHOW: { label: "Не пришёл", variant: "destructive" },
   };
   const cfg = map[status] || { label: status, variant: "secondary" as const };

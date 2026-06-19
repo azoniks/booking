@@ -16,8 +16,8 @@ export default async function BlocksPage() {
   ]);
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold">Блокировки</h1>
-      <p className="text-sm text-muted-foreground">
+      <h1 className="text-2xl font-bold px-4 md:px-6">Блокировки</h1>
+      <p className="text-sm text-muted-foreground px-4 md:px-6">
         Ручная блокировка времени объекта (ремонт, личное использование).
       </p>
       <BlocksManager

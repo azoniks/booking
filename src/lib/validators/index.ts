@@ -140,7 +140,7 @@ export const objectCreateSchema = z.object({
 export const objectUpdateSchema = objectCreateSchema.partial();
 
 export const blockCreateSchema = z.object({
-  objectId: z.string().min(1),
+  objectIds: z.array(z.string().min(1)).min(1),
   startAt: z.string().datetime(),
   endAt: z.string().datetime(),
   reason: z.string().max(500).optional().nullable(),
@@ -237,19 +237,51 @@ export const publicBookingGroupSchema = z.object({
   items: z.array(bookingGroupItemSchema).min(1).max(20),
 });
 
+// Состояние оплаты при ручном создании брони/заказа администратором:
+// none — не оплачено (PENDING), prepaid — аванс внесён (PREPAID),
+// paid — полностью оплачено (PAID).
+export const paymentStateSchema = z
+  .enum(["none", "prepaid", "paid"])
+  .default("none");
+export type PaymentState = z.infer<typeof paymentStateSchema>;
+
+// Маппинг состояния оплаты в статус брони/заказа + момент полной оплаты.
+// paidAt выставляется только при полной оплате (PAID).
+export function paymentStateToStatus(state: PaymentState): {
+  status: "PENDING" | "PREPAID" | "PAID";
+  paidAt: Date | null;
+} {
+  if (state === "paid") return { status: "PAID", paidAt: new Date() };
+  if (state === "prepaid") return { status: "PREPAID", paidAt: null };
+  return { status: "PENDING", paidAt: null };
+}
+
 // Админское ручное создание группового заказа: email необязателен,
-// markAsPaid сразу помечает заказ оплаченным (без Tinkoff).
+// paymentState задаёт стартовый статус оплаты (без Tinkoff).
 export const adminBookingGroupSchema = z.object({
   guestName: z.string().min(2).max(100),
   guestEmail: z.string().email().or(z.literal("")).optional(),
   guestPhone: z.string().min(1).max(30),
   guestComment: z.string().max(1000).optional(),
-  markAsPaid: z.boolean().optional(),
+  paymentState: paymentStateSchema,
   items: z.array(bookingGroupItemSchema).min(1).max(20),
 });
 
+// Перенос брони: поля расписания по режиму объекта + число гостей.
+// Конкретный набор полей зависит от режима (DAILY/HOURLY/FULL_DAY).
+export const bookingRescheduleSchema = z.object({
+  checkInDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  checkOutDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  startAt: z.string().datetime().optional(),
+  endAt: z.string().datetime().optional(),
+  slotId: z.string().min(1).optional(),
+  slotDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  bookingDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  guestsCount: z.coerce.number().int().min(1).max(1000),
+});
+
 // Админская ручная бронь: email/телефон необязательны (можно вписать «-»),
-// markAsPaid=true сразу выставляет PAID и пропускает Tinkoff.
+// paymentState задаёт стартовый статус оплаты и пропускает Tinkoff.
 export const adminBookingSchema = z.object({
   objectId: z.string().min(1),
   checkInDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
@@ -264,7 +296,7 @@ export const adminBookingSchema = z.object({
   guestEmail: z.string().email().or(z.literal("")).optional(),
   guestPhone: z.string().min(1).max(30),
   guestComment: z.string().max(1000).optional(),
-  markAsPaid: z.boolean().optional().default(true),
+  paymentState: paymentStateSchema,
 });
 
 export const availabilityQuerySchema = z.object({

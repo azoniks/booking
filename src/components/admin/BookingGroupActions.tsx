@@ -1,9 +1,70 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Undo2, XCircle, Trash2 } from "lucide-react";
+import { Undo2, XCircle, Trash2, Wallet, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/use-toast";
+
+// Смена статуса оплаты заказа (PREPAID/PAID) через PATCH /booking-groups/[id].
+function GroupSetStatusButton({
+  id,
+  status,
+  label,
+  icon,
+  confirmText,
+}: {
+  id: string;
+  status: "PREPAID" | "PAID";
+  label: string;
+  icon: React.ReactNode;
+  confirmText: string;
+}) {
+  const router = useRouter();
+  async function doSet() {
+    if (!confirm(confirmText)) return;
+    const res = await fetch(`/api/admin/booking-groups/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    });
+    const j = await res.json();
+    if (!j.ok) {
+      toast({ title: "Ошибка", description: j.error || "Не удалось", variant: "destructive" });
+      return;
+    }
+    toast({ title: "Статус заказа обновлён" });
+    router.refresh();
+  }
+  return (
+    <Button type="button" variant={status === "PAID" ? "default" : "outline"} onClick={doSet}>
+      {icon} {label}
+    </Button>
+  );
+}
+
+export function GroupMarkPrepaidButton({ id }: { id: string }) {
+  return (
+    <GroupSetStatusButton
+      id={id}
+      status="PREPAID"
+      label="Аванс внесён"
+      icon={<Wallet className="w-4 h-4 mr-2" />}
+      confirmText="Отметить аванс по всему заказу внесённым?"
+    />
+  );
+}
+
+export function GroupMarkPaidButton({ id }: { id: string }) {
+  return (
+    <GroupSetStatusButton
+      id={id}
+      status="PAID"
+      label="Подтвердить полную оплату"
+      icon={<CheckCircle2 className="w-4 h-4 mr-2" />}
+      confirmText="Подтвердить полную оплату по всему заказу?"
+    />
+  );
+}
 
 export function GroupRefundButton({ id, amount }: { id: string; amount: string }) {
   const router = useRouter();

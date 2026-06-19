@@ -28,9 +28,24 @@ export function BlocksManager({
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
+
+  const allSelected = objects.length > 0 && selected.length === objects.length;
+
+  function toggleOne(id: string) {
+    setSelected((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
+  }
+
+  function toggleAll() {
+    setSelected(allSelected ? [] : objects.map((o) => o.id));
+  }
 
   async function create(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (selected.length === 0) {
+      toast({ title: "Выберите хотя бы один объект", variant: "destructive" });
+      return;
+    }
     const fd = new FormData(e.currentTarget);
     const startLocal = String(fd.get("startAt"));
     const endLocal = String(fd.get("endAt"));
@@ -38,7 +53,7 @@ export function BlocksManager({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        objectId: fd.get("objectId"),
+        objectIds: selected,
         startAt: new Date(startLocal).toISOString(),
         endAt: new Date(endLocal).toISOString(),
         reason: fd.get("reason") || null,
@@ -49,8 +64,9 @@ export function BlocksManager({
       toast({ title: "Ошибка", description: j.error || "Не удалось создать", variant: "destructive" });
       return;
     }
-    toast({ title: "Блокировка создана" });
+    toast({ title: `Блокировок создано: ${j.data?.count ?? selected.length}` });
     setOpen(false);
+    setSelected([]);
     router.refresh();
   }
 
@@ -73,19 +89,32 @@ export function BlocksManager({
         <Card>
           <CardContent className="p-4">
             <form onSubmit={create} className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div>
-                <Label>Объект</Label>
-                <select
-                  name="objectId"
-                  className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
-                  required
-                >
+              <div className="md:col-span-3">
+                <div className="flex items-center justify-between">
+                  <Label>Объекты ({selected.length} из {objects.length})</Label>
+                  <button
+                    type="button"
+                    onClick={toggleAll}
+                    className="text-sm text-primary underline"
+                  >
+                    {allSelected ? "Снять все" : "Выбрать все"}
+                  </button>
+                </div>
+                <div className="mt-1 max-h-48 overflow-y-auto rounded-md border border-input p-2 space-y-1">
                   {objects.map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {o.categoryName} — {o.name}
-                    </option>
+                    <label
+                      key={o.id}
+                      className="flex items-center gap-2 text-sm cursor-pointer rounded px-1 py-0.5 hover:bg-muted"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selected.includes(o.id)}
+                        onChange={() => toggleOne(o.id)}
+                      />
+                      <span>{o.categoryName} — {o.name}</span>
+                    </label>
                   ))}
-                </select>
+                </div>
               </div>
               <div>
                 <Label>Начало</Label>

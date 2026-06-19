@@ -241,13 +241,18 @@ async function prepareBooking(args: BookingScheduleArgs): Promise<PreparedBookin
  * Можно вызывать несколько раз в одной транзакции (для группы) — уже созданные
  * в этой же транзакции брони видны последующим проверкам.
  */
-async function assertAvailable(tx: Prisma.TransactionClient, p: PreparedBooking) {
+async function assertAvailable(
+  tx: Prisma.TransactionClient,
+  p: PreparedBooking,
+  excludeBookingId?: string,
+) {
   const t = p.obj.objectType;
   const conflicts = await findConflicts(tx, {
     objectId: p.obj.id,
     startAt: p.startAt,
     endAt: p.endAt,
     cleaningMinutes: t.cleaningMinutes,
+    excludeBookingId,
   });
   if (conflicts.blocks.length > 0) throw new BookingConflictError();
 
@@ -315,6 +320,90 @@ export async function createBooking(args: CreateBookingArgs) {
     async (tx) => {
       await assertAvailable(tx, prepared);
       return tx.booking.create({ data: buildBookingCreateData(prepared, guest) });
+    },
+    { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+  );
+}
+
+// Параметры переноса брони: поля расписания (по режиму) + число гостей.
+export interface RescheduleArgs {
+  checkInDate?: string;
+  checkOutDate?: string;
+  startAt?: string;
+  endAt?: string;
+  slotId?: string;
+  slotDate?: string;
+  bookingDate?: string;
+  guestsCount: number;
+}
+
+/**
+ * Перенос существующей брони на новые дату/время. Объект не меняется.
+ * Пересчитывает startAt/endAt/blockedUntil и цену/предоплату по новым датам
+ * (как при создании), проверяет пересечения, исключая саму бронь. Если бронь
+ * входит в заказ — пересчитывает итоги заказа.
+ */
+export async function rescheduleBooking(bookingId: string, schedule: RescheduleArgs) {
+  const booking = await prisma.booking.findUnique({
+    where: { id: bookingId },
+    select: { id: true, objectId: true, groupId: true },
+  });
+  if (!booking) throw new ObjectNotAvailableError("Бронь не найдена");
+
+  const prepared = await prepareBooking({
+    objectId: booking.objectId,
+    checkInDate: schedule.checkInDate,
+    checkOutDate: schedule.checkOutDate,
+    startAt: schedule.startAt,
+    endAt: schedule.endAt,
+    slotId: schedule.slotId,
+    slotDate: schedule.slotDate,
+    bookingDate: schedule.bookingDate,
+    guestsCount: schedule.guestsCount,
+  });
+
+  return prisma.$transaction(
+    async (tx) => {
+      await assertAvailable(tx, prepared, bookingId);
+      const updated = await tx.booking.update({
+        where: { id: bookingId },
+        data: {
+          startAt: prepared.startAt,
+          endAt: prepared.endAt,
+          blockedUntil: prepared.blockedUntil,
+          guestsCount: prepared.guestsCount,
+          extraGuests: prepared.pricing.extraGuests,
+          basePrice: prepared.pricing.basePriceTotal,
+          extraGuestsCost: prepared.pricing.extraGuestsCost,
+          totalPrice: prepared.pricing.totalPrice,
+          prepaymentAmount: prepared.prepay.prepaymentAmount,
+          paymentPercent: prepared.prepay.paymentPercent,
+          paymentType: prepared.prepay.paymentType,
+          sectionsBooked: prepared.sectionsNeeded,
+        },
+      });
+
+      // Бронь в составе заказа — пересчитываем итоги заказа по всем его броням.
+      if (booking.groupId) {
+        const groupBookings = await tx.booking.findMany({
+          where: { groupId: booking.groupId },
+          select: { totalPrice: true, prepaymentAmount: true },
+        });
+        const totalPrice = groupBookings.reduce(
+          (s, b) => s.add(b.totalPrice),
+          new Prisma.Decimal(0),
+        );
+        const prepaymentAmount = groupBookings.reduce(
+          (s, b) => s.add(b.prepaymentAmount),
+          new Prisma.Decimal(0),
+        );
+        await tx.bookingGroup.update({
+          where: { id: booking.groupId },
+          data: { totalPrice, prepaymentAmount },
+        });
+      }
+
+      return updated;
     },
     { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
   );

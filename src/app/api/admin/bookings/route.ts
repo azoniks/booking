@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { ok, handleError, requireAdmin, unauth } from "@/lib/api-utils";
 import { Prisma } from "@prisma/client";
-import { adminBookingSchema } from "@/lib/validators";
+import { adminBookingSchema, paymentStateToStatus } from "@/lib/validators";
 import { createBooking } from "@/lib/booking-service";
 
 export async function GET(req: NextRequest) {
@@ -52,10 +52,12 @@ export async function POST(req: NextRequest) {
       guestPhone: data.guestPhone,
       guestComment: data.guestComment,
     });
-    if (data.markAsPaid) {
+    // Стартовый статус оплаты по выбору администратора (none/prepaid/paid).
+    if (data.paymentState !== "none") {
+      const { status, paidAt } = paymentStateToStatus(data.paymentState);
       await prisma.booking.update({
         where: { id: booking.id },
-        data: { status: "PAID", paidAt: new Date() },
+        data: { status, paidAt },
       });
     }
     return ok({ id: booking.id, publicCode: booking.publicCode }, 201);

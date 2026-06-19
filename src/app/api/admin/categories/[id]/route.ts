@@ -64,7 +64,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       const active = await prisma.booking.findMany({
         where: {
           object: { objectType: { categoryId: id } },
-          status: { in: ["PENDING", "PAID"] },
+          status: { in: ["PENDING", "PREPAID", "PAID"] },
           endAt: { gt: new Date() },
         },
         select: {

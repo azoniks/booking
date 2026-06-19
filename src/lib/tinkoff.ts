@@ -404,8 +404,9 @@ export async function verifyTinkoffWebhook(
   return expected === payload.Token;
 }
 
-// Помечает успешную оплату: payment=SUCCEEDED и все связанные брони PAID
-// (одиночную бронь ИЛИ всю группу — атомарно).
+// Помечает успешную оплату: payment=SUCCEEDED и все связанные брони PREPAID
+// (онлайн оплачивается только предоплата → «аванс внесён»; полную оплату
+// менеджер подтверждает вручную). Одиночную бронь ИЛИ всю группу — атомарно.
 async function settleSuccess(
   payment: { id: string; bookingId: string | null; groupId: string | null },
   rawPayload?: unknown,
@@ -425,18 +426,18 @@ async function settleSuccess(
     ops.push(
       prisma.bookingGroup.update({
         where: { id: payment.groupId },
-        data: { status: "PAID", paidAt: now },
+        data: { status: "PREPAID", paidAt: now },
       }),
       prisma.booking.updateMany({
         where: { groupId: payment.groupId, status: "PENDING" },
-        data: { status: "PAID", paidAt: now },
+        data: { status: "PREPAID", paidAt: now },
       }),
     );
   } else if (payment.bookingId) {
     ops.push(
       prisma.booking.update({
         where: { id: payment.bookingId },
-        data: { status: "PAID", paidAt: now },
+        data: { status: "PREPAID", paidAt: now },
       }),
     );
   }
@@ -605,7 +606,7 @@ export async function cancelGroup(groupId: string, reason = "Отменён ад
       data: { status: "CANCELLED", cancelledAt: now },
     }),
     prisma.booking.updateMany({
-      where: { groupId, status: { in: ["PENDING", "PAID"] } },
+      where: { groupId, status: { in: ["PENDING", "PREPAID", "PAID"] } },
       data: { status: "CANCELLED", cancelReason: reason, cancelledAt: now },
     }),
     prisma.payment.updateMany({
@@ -648,7 +649,7 @@ export async function refundGroupPayment(groupId: string): Promise<{
         data: { status: "CANCELLED", cancelledAt: new Date() },
       }),
       prisma.booking.updateMany({
-        where: { groupId, status: { in: ["PENDING", "PAID"] } },
+        where: { groupId, status: { in: ["PENDING", "PREPAID", "PAID"] } },
         data: { status: "CANCELLED", cancelReason: "Возврат средств", cancelledAt: new Date() },
       }),
     ]);

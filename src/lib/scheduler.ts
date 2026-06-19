@@ -26,7 +26,8 @@ export function startScheduler() {
       const in25h = new Date(now.getTime() + 25 * 60 * 60 * 1000);
       const targets = await prisma.booking.findMany({
         where: {
-          status: "PAID",
+          // Подтверждённые брони: полностью оплаченные и с внесённым авансом.
+          status: { in: ["PAID", "PREPAID"] },
           reminderSentAt: null,
           startAt: { gte: in24h, lte: in25h },
         },

@@ -10,8 +10,8 @@ export default async function CategoriesPage() {
   });
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold">Категории</h1>
-      <p className="text-sm text-muted-foreground">
+      <h1 className="text-2xl font-bold px-4 md:px-6">Категории</h1>
+      <p className="text-sm text-muted-foreground px-4 md:px-6">
         Категории — это вкладки на главной. Порядок задаёт сортировку вкладок.
       </p>
       <CategoriesManager

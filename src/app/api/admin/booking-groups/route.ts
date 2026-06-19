@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { ok, handleError, requireAdmin, unauth } from "@/lib/api-utils";
-import { adminBookingGroupSchema } from "@/lib/validators";
+import { adminBookingGroupSchema, paymentStateToStatus } from "@/lib/validators";
 import { createBookingGroup } from "@/lib/booking-service";
 
 // Ручное создание группового заказа администратором: тот же createBookingGroup
@@ -18,16 +18,17 @@ export async function POST(req: NextRequest) {
       guestComment: data.guestComment,
     });
 
-    if (data.markAsPaid) {
-      const now = new Date();
+    // Стартовый статус оплаты заказа и всех его броней (none/prepaid/paid).
+    if (data.paymentState !== "none") {
+      const { status, paidAt } = paymentStateToStatus(data.paymentState);
       await prisma.$transaction([
         prisma.bookingGroup.update({
           where: { id: group.id },
-          data: { status: "PAID", paidAt: now },
+          data: { status, paidAt },
         }),
         prisma.booking.updateMany({
           where: { groupId: group.id },
-          data: { status: "PAID", paidAt: now },
+          data: { status, paidAt },
         }),
       ]);
     }

@@ -16,15 +16,17 @@ export async function POST(req: NextRequest) {
   if (!(await requireAdmin())) return unauth();
   try {
     const body = blockCreateSchema.parse(await req.json());
-    const created = await prisma.objectBlock.create({
-      data: {
-        objectId: body.objectId,
-        startAt: new Date(body.startAt),
-        endAt: new Date(body.endAt),
+    const startAt = new Date(body.startAt);
+    const endAt = new Date(body.endAt);
+    const created = await prisma.objectBlock.createMany({
+      data: body.objectIds.map((objectId) => ({
+        objectId,
+        startAt,
+        endAt,
         reason: body.reason || null,
-      },
+      })),
     });
-    return ok(created, 201);
+    return ok({ count: created.count }, 201);
   } catch (e) {
     return handleError(e);
   }

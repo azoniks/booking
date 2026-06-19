@@ -38,7 +38,7 @@ export async function findConflicts(
   const bookings = await client.booking.findMany({
     where: {
       objectId: args.objectId,
-      status: { in: ["PENDING", "PAID"] },
+      status: { in: ["PENDING", "PREPAID", "PAID"] },
       ...(args.excludeBookingId ? { NOT: { id: args.excludeBookingId } } : {}),
       // конфликт: a.start < b.end && b.start < a.end
       startAt: { lt: blockedUntil },

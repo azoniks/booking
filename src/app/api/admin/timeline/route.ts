@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
       prisma.booking.findMany({
         where: {
           objectId: { in: objectIds },
-          status: { in: ["PENDING", "PAID"] },
+          status: { in: ["PENDING", "PREPAID", "PAID"] },
           startAt: { lt: toDate },
           blockedUntil: { gt: fromDate },
         },
@@ -49,8 +49,11 @@ export async function GET(req: NextRequest) {
           status: true,
           guestName: true,
           guestPhone: true,
+          guestComment: true,
           guestsCount: true,
           totalPrice: true,
+          groupId: true,
+          group: { select: { publicCode: true, status: true, totalPrice: true } },
         },
         orderBy: { startAt: "asc" },
       }),
@@ -82,6 +85,8 @@ export async function GET(req: NextRequest) {
           categoryName: t.category.name,
           bookingMode: t.category.bookingMode,
           cleaningMinutes: t.cleaningMinutes,
+          baseCapacity: t.baseCapacity,
+          basePrice: Number(t.basePrice),
           objects: t.objects.map((o) => ({
             id: o.id,
             name: o.name,
@@ -95,6 +100,13 @@ export async function GET(req: NextRequest) {
         endAt: b.endAt.toISOString(),
         blockedUntil: b.blockedUntil.toISOString(),
         totalPrice: b.totalPrice.toString(),
+        group: b.group
+          ? {
+              publicCode: b.group.publicCode,
+              status: b.group.status,
+              totalPrice: b.group.totalPrice.toString(),
+            }
+          : null,
       })),
       blocks: blocks.map((b) => ({
         ...b,

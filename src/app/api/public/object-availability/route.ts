@@ -59,7 +59,7 @@ export async function GET(req: NextRequest) {
     const bookings = await prisma.booking.findMany({
       where: {
         objectId,
-        status: { in: ["PENDING", "PAID"] },
+        status: { in: ["PENDING", "PREPAID", "PAID"] },
         // окно пересечения: bookingStart < windowEnd && bookingBlockedUntil > windowStart
         startAt: { lt: toDate },
         blockedUntil: { gt: fromDate },

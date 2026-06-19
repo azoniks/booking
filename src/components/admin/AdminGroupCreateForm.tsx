@@ -1,10 +1,12 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Search } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PhoneInput } from "@/components/ui/phone-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/use-toast";
@@ -13,12 +15,20 @@ import {
   type ScheduleState,
 } from "@/components/client/ObjectSchedulePicker";
 import type { CartSchedule } from "@/components/client/CartProvider";
+import {
+  ObjectSortSelect,
+  sortObjects,
+  DEFAULT_OBJECT_SORT,
+  type ObjectSort,
+} from "./objectSort";
 
 type ObjOption = {
   id: string;
   name: string;
   categoryName: string;
   typeName: string;
+  baseCapacity: number;
+  basePrice: number;
   isAddon: boolean;
   addons: { id: string; name: string }[];
 };
@@ -38,7 +48,10 @@ export function AdminGroupCreateForm({
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [comment, setComment] = useState("");
-  const [markAsPaid, setMarkAsPaid] = useState(false);
+  // Две галочки оплаты: полная оплата приоритетнее аванса.
+  const [prepaidMade, setPrepaidMade] = useState(false);
+  const [fullyPaid, setFullyPaid] = useState(false);
+  const paymentState = fullyPaid ? "paid" : prepaidMade ? "prepaid" : "none";
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -99,7 +112,7 @@ export function AdminGroupCreateForm({
           guestEmail: email,
           guestPhone: phone,
           guestComment: comment,
-          markAsPaid,
+          paymentState,
           items,
         }),
       });
@@ -123,21 +136,7 @@ export function AdminGroupCreateForm({
       <Card>
         <CardContent className="p-4 space-y-2">
           <Label>Добавить объект в заказ</Label>
-          <select
-            value=""
-            onChange={(e) => addObject(e.target.value)}
-            className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
-            disabled={available.length === 0}
-          >
-            <option value="">
-              {available.length === 0 ? "Все объекты добавлены" : "— выберите объект —"}
-            </option>
-            {available.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.name} · {o.categoryName} / {o.typeName}
-              </option>
-            ))}
-          </select>
+          <ObjectAddPicker objects={available} onAdd={addObject} />
         </CardContent>
       </Card>
 
@@ -183,7 +182,7 @@ export function AdminGroupCreateForm({
           </div>
           <div>
             <Label className="text-xs">Телефон</Label>
-            <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+7…" required />
+            <PhoneInput value={phone} onChange={setPhone} required />
           </div>
           <div className="sm:col-span-2">
             <Label className="text-xs">Email (необязательно)</Label>
@@ -193,10 +192,30 @@ export function AdminGroupCreateForm({
             <Label className="text-xs">Комментарий (необязательно)</Label>
             <Textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={2} />
           </div>
-          <label className="sm:col-span-2 flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={markAsPaid} onChange={(e) => setMarkAsPaid(e.target.checked)} />
-            Отметить заказ оплаченным (без Tinkoff)
-          </label>
+          <div className="sm:col-span-2 space-y-2">
+            <Label className="text-xs">Оплата</Label>
+            <div className="flex flex-col gap-2 sm:flex-row sm:gap-6">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={prepaidMade}
+                  onChange={(e) => setPrepaidMade(e.target.checked)}
+                />
+                Аванс внесён
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={fullyPaid}
+                  onChange={(e) => setFullyPaid(e.target.checked)}
+                />
+                Полностью оплачено
+              </label>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Если ничего не отмечено — заказ не оплачен (без Tinkoff).
+            </p>
+          </div>
         </CardContent>
       </Card>
 
@@ -205,7 +224,13 @@ export function AdminGroupCreateForm({
           Объектов: <b>{selectedIds.length}</b> · Итого: <b>{fmt(totalPrice)} ₽</b>
         </div>
         <Button disabled={!canSubmit} onClick={submit}>
-          {submitting ? "Создаём…" : markAsPaid ? "Создать заказ (оплачен)" : "Создать заказ"}
+          {submitting
+            ? "Создаём…"
+            : fullyPaid
+              ? "Создать заказ (оплачен)"
+              : prepaidMade
+                ? "Создать заказ (аванс)"
+                : "Создать заказ"}
         </Button>
       </div>
       {error && <p className="text-sm text-destructive">{error}</p>}
@@ -213,6 +238,134 @@ export function AdminGroupCreateForm({
         <p className="text-xs text-muted-foreground">
           Заполните дату/время и число гостей для каждого объекта.
         </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Поиск по объектам для добавления в групповой заказ. В отличие от пикера
+ * одиночной брони, выбор не «запоминается» — объект добавляется в заказ и поле
+ * очищается, позволяя сразу искать следующий.
+ */
+function ObjectAddPicker({
+  objects,
+  onAdd,
+}: {
+  objects: ObjOption[];
+  onAdd: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [hoverIdx, setHoverIdx] = useState(0);
+  const [sort, setSort] = useState<ObjectSort>(DEFAULT_OBJECT_SORT);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const base = q
+      ? objects.filter((o) =>
+          `${o.categoryName} ${o.typeName} ${o.name}`.toLowerCase().includes(q),
+        )
+      : objects;
+    return sortObjects(base, sort);
+  }, [objects, query, sort]);
+
+  useEffect(() => {
+    function onDocClick(e: MouseEvent) {
+      if (!wrapRef.current) return;
+      if (!wrapRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, []);
+
+  function pick(o: ObjOption) {
+    onAdd(o.id);
+    setQuery("");
+    setHoverIdx(0);
+    inputRef.current?.focus();
+  }
+
+  const disabled = objects.length === 0;
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+        <Input
+          ref={inputRef}
+          type="text"
+          value={query}
+          disabled={disabled}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setOpen(true);
+            setHoverIdx(0);
+          }}
+          onFocus={() => setOpen(true)}
+          onClick={() => setOpen(true)}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowDown") {
+              e.preventDefault();
+              setOpen(true);
+              setHoverIdx((i) => Math.min(filtered.length - 1, i + 1));
+            } else if (e.key === "ArrowUp") {
+              e.preventDefault();
+              setHoverIdx((i) => Math.max(0, i - 1));
+            } else if (e.key === "Enter") {
+              e.preventDefault();
+              const item = filtered[hoverIdx];
+              if (item) pick(item);
+            } else if (e.key === "Escape") {
+              setOpen(false);
+              inputRef.current?.blur();
+            }
+          }}
+          placeholder={
+            disabled ? "Все объекты добавлены" : "Поиск по названию или категории…"
+          }
+          className="pl-9"
+          autoComplete="off"
+        />
+      </div>
+
+      {open && !disabled && (
+        <div className="absolute left-0 right-0 z-30 mt-1 max-h-72 overflow-y-auto rounded-md border border-slate-200 bg-white shadow-lg">
+          <div className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b bg-white px-2 py-1.5">
+            <span className="text-xs text-muted-foreground">Сортировка</span>
+            <ObjectSortSelect value={sort} onChange={setSort} />
+          </div>
+          {filtered.length === 0 ? (
+            <div className="px-3 py-3 text-sm text-muted-foreground">
+              Ничего не найдено
+            </div>
+          ) : (
+            filtered.map((o, i) => (
+              <button
+                key={o.id}
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  pick(o);
+                }}
+                onMouseEnter={() => setHoverIdx(i)}
+                className={`w-full text-left px-3 py-2 text-sm ${
+                  i === hoverIdx ? "bg-slate-100" : "bg-white hover:bg-slate-50"
+                }`}
+              >
+                <span className="truncate">
+                  {o.name}
+                  <span className="text-muted-foreground">
+                    {" "}
+                    · {o.categoryName} → {o.typeName}
+                  </span>
+                </span>
+              </button>
+            ))
+          )}
+        </div>
       )}
     </div>
   );

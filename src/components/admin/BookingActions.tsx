@@ -105,18 +105,22 @@ export function BookingActions({ id, status }: { id: string; status: string }) {
     toast({ title: "Статус изменён" });
     router.refresh();
   }
+  const active = status === "PAID" || status === "PREPAID";
   return (
     <div className="flex flex-wrap gap-2">
-      {status !== "PAID" && (
+      {status === "PENDING" && (
+        <Button variant="outline" onClick={() => setStatus("PREPAID")}>Аванс внесён</Button>
+      )}
+      {(status === "PENDING" || status === "PREPAID") && (
         <Button variant="default" onClick={() => setStatus("PAID")}>Подтвердить оплату</Button>
       )}
       {status !== "CANCELLED" && (
         <Button variant="destructive" onClick={() => setStatus("CANCELLED")}>Отменить</Button>
       )}
-      {status !== "COMPLETED" && status === "PAID" && (
+      {active && (
         <Button variant="outline" onClick={() => setStatus("COMPLETED")}>Завершить</Button>
       )}
-      {status === "PAID" && (
+      {active && (
         <Button variant="outline" onClick={() => setStatus("NO_SHOW")}>Не пришёл</Button>
       )}
     </div>

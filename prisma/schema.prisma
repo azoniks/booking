@@ -256,6 +256,7 @@ model BookingGroup {
 
 enum BookingStatus {
   PENDING
+  PREPAID
   PAID
   CANCELLED
   COMPLETED

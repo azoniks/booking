@@ -18,8 +18,8 @@ export default async function ObjectsPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold">Объекты</h1>
-      <p className="text-sm text-muted-foreground">
+      <h1 className="text-2xl font-bold px-4 md:px-6">Объекты</h1>
+      <p className="text-sm text-muted-foreground px-4 md:px-6">
         Создайте конкретный объект и заполните карточку, добавив медиа.
       </p>
       <ObjectsList

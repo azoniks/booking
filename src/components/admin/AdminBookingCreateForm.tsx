@@ -9,6 +9,7 @@ import {
 } from "@/components/client/ObjectSchedulePicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PhoneInput } from "@/components/ui/phone-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +26,12 @@ import {
 } from "@/components/ui/sheet";
 import { toast } from "@/components/ui/use-toast";
 import { formatSlotEndSuffix } from "@/lib/slots";
+import {
+  ObjectSortSelect,
+  sortObjects,
+  DEFAULT_OBJECT_SORT,
+  type ObjectSort,
+} from "./objectSort";
 
 type FormObject = {
   id: string;
@@ -36,6 +43,7 @@ type FormObject = {
   checkOutTime: string | null;
   baseCapacity: number;
   maxCapacity: number;
+  basePrice: number;
   slots: {
     id: string;
     name: string;
@@ -94,6 +102,16 @@ export function AdminBookingCreateForm({
     setAddonStates((prev) => ({ ...prev, [s.objectId]: s }));
   }, []);
 
+  // Открываем нативный календарь по клику в любом месте поля (а не только по иконке).
+  const openPicker = useCallback((e: React.MouseEvent<HTMLInputElement>) => {
+    const el = e.currentTarget as HTMLInputElement & { showPicker?: () => void };
+    try {
+      el.showPicker?.();
+    } catch {
+      // showPicker может бросить вне user-gesture или если не поддерживается — игнорируем.
+    }
+  }, []);
+
   function toggleAddon(id: string) {
     setCheckedAddons((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
@@ -119,7 +137,10 @@ export function AdminBookingCreateForm({
       guestPhone: String(fd.get("guestPhone") || "").trim(),
       guestComment: String(fd.get("guestComment") || "").trim() || undefined,
     };
-    const markAsPaid = fd.get("markAsPaid") === "on";
+    // Две галочки оплаты: полная оплата приоритетнее аванса.
+    const fullyPaid = fd.get("fullyPaid") === "on";
+    const prepaidMade = fd.get("prepaidMade") === "on";
+    const paymentState = fullyPaid ? "paid" : prepaidMade ? "prepaid" : "none";
 
     // Расписание основного объекта (фрагмент без гостевых данных).
     const mainItem: Record<string, unknown> = { objectId: selected.id, guestsCount };
@@ -169,7 +190,7 @@ export function AdminBookingCreateForm({
         const res = await fetch("/api/admin/booking-groups", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...guest, markAsPaid, items: [mainItem, ...addonItems] }),
+          body: JSON.stringify({ ...guest, paymentState, items: [mainItem, ...addonItems] }),
         });
         const j = await res.json();
         if (!j.ok) {
@@ -185,7 +206,7 @@ export function AdminBookingCreateForm({
         const res = await fetch("/api/admin/bookings", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...mainItem, ...guest, markAsPaid }),
+          body: JSON.stringify({ ...mainItem, ...guest, paymentState }),
         });
         const j = await res.json();
         if (!j.ok) {
@@ -248,6 +269,7 @@ export function AdminBookingCreateForm({
                       required
                       value={dateValue}
                       onChange={(e) => setDateValue(e.target.value)}
+                      onClick={openPicker}
                     />
                     {selected.checkInTime && (
                       <p className="text-xs text-muted-foreground mt-1">
@@ -257,7 +279,7 @@ export function AdminBookingCreateForm({
                   </div>
                   <div>
                     <Label>Выезд</Label>
-                    <Input name="checkOutDate" type="date" required />
+                    <Input name="checkOutDate" type="date" required onClick={openPicker} />
                     {selected.checkOutTime && (
                       <p className="text-xs text-muted-foreground mt-1">
                         время выезда: {selected.checkOutTime}
@@ -276,6 +298,7 @@ export function AdminBookingCreateForm({
                     required
                     value={dateValue}
                     onChange={(e) => setDateValue(e.target.value)}
+                    onClick={openPicker}
                   />
                   <p className="text-xs text-muted-foreground mt-1">
                     бронь на весь рабочий день
@@ -339,6 +362,7 @@ export function AdminBookingCreateForm({
                           required
                           value={dateValue}
                           onChange={(e) => setDateValue(e.target.value)}
+                          onClick={openPicker}
                         />
                       </div>
                     </>
@@ -346,11 +370,11 @@ export function AdminBookingCreateForm({
                     <>
                       <div>
                         <Label>Начало</Label>
-                        <Input name="startAt" type="datetime-local" required />
+                        <Input name="startAt" type="datetime-local" required onClick={openPicker} />
                       </div>
                       <div>
                         <Label>Конец</Label>
-                        <Input name="endAt" type="datetime-local" required />
+                        <Input name="endAt" type="datetime-local" required onClick={openPicker} />
                       </div>
                     </>
                   )}
@@ -412,24 +436,36 @@ export function AdminBookingCreateForm({
               </div>
               <div>
                 <Label>Телефон</Label>
-                <Input name="guestPhone" required placeholder="+7..." />
+                <PhoneInput name="guestPhone" required />
               </div>
               <div>
                 <Label>Email (опц.)</Label>
                 <Input name="guestEmail" type="email" placeholder="guest@example.com" />
               </div>
 
-              <div className="md:col-span-2 flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="markAsPaid"
-                  name="markAsPaid"
-                  defaultChecked
-                  className="h-4 w-4"
-                />
-                <Label htmlFor="markAsPaid" className="!mb-0">
-                  Сразу как оплачено
-                </Label>
+              <div className="md:col-span-2 space-y-2">
+                <Label className="!mb-0">Оплата</Label>
+                <div className="flex flex-col gap-2 sm:flex-row sm:gap-6">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      name="prepaidMade"
+                      className="h-4 w-4"
+                    />
+                    Аванс внесён
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      name="fullyPaid"
+                      className="h-4 w-4"
+                    />
+                    Полностью оплачено
+                  </label>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Если ничего не отмечено — бронь не оплачена.
+                </p>
               </div>
 
               <div className="md:col-span-2">
@@ -470,6 +506,7 @@ function ObjectSearchPicker({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [hoverIdx, setHoverIdx] = useState(0);
+  const [sort, setSort] = useState<ObjectSort>(DEFAULT_OBJECT_SORT);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -480,11 +517,13 @@ function ObjectSearchPicker({
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return objects;
-    return objects.filter((o) =>
-      `${o.categoryName} ${o.typeName} ${o.name}`.toLowerCase().includes(q),
-    );
-  }, [objects, query]);
+    const base = q
+      ? objects.filter((o) =>
+          `${o.categoryName} ${o.typeName} ${o.name}`.toLowerCase().includes(q),
+        )
+      : objects;
+    return sortObjects(base, sort);
+  }, [objects, query, sort]);
 
   // Закрытие при клике вне
   useEffect(() => {
@@ -568,7 +607,11 @@ function ObjectSearchPicker({
       </div>
 
       {open && (
-        <div className="absolute left-0 right-0 z-30 mt-1 max-h-64 overflow-y-auto rounded-md border border-slate-200 bg-white shadow-lg">
+        <div className="absolute left-0 right-0 z-30 mt-1 max-h-72 overflow-y-auto rounded-md border border-slate-200 bg-white shadow-lg">
+          <div className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b bg-white px-2 py-1.5">
+            <span className="text-xs text-muted-foreground">Сортировка</span>
+            <ObjectSortSelect value={sort} onChange={setSort} />
+          </div>
           {filtered.length === 0 ? (
             <div className="px-3 py-3 text-sm text-muted-foreground">
               Ничего не найдено

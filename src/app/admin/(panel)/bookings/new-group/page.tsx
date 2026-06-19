@@ -19,12 +19,14 @@ export default async function NewGroupPage() {
     name: o.name,
     categoryName: o.objectType.category.name,
     typeName: o.objectType.name,
+    baseCapacity: o.objectType.baseCapacity,
+    basePrice: Number(o.objectType.basePrice),
     isAddon: o.isAddon,
     addons: o.addons.map((a) => ({ id: a.id, name: a.name })),
   }));
 
   return (
-    <div className="space-y-4 max-w-3xl">
+    <div className="space-y-4 max-w-3xl px-4 md:px-6">
       <Link href="/admin/bookings" className="text-sm text-muted-foreground hover:underline">
         ← Все брони
       </Link>

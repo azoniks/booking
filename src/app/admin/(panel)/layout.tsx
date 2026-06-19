@@ -113,7 +113,7 @@ export default async function AdminPanelLayout({ children }: { children: React.R
           </form>
         </div>
       </aside>
-      <main className="flex-1 p-4 md:p-6 overflow-x-auto">{children}</main>
+      <main className="flex-1 py-4 md:py-6 overflow-x-auto">{children}</main>
     </div>
   );
 }

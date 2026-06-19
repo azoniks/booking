@@ -11,15 +11,47 @@ import {
   BookingsBulkDelete,
 } from "@/components/admin/BookingsListRowActions";
 import { CollapsibleFilters } from "@/components/admin/CollapsibleFilters";
+import {
+  BookingsSortSelect,
+  DEFAULT_BOOKINGS_SORT,
+  type BookingsSort,
+} from "@/components/admin/BookingsSortSelect";
+import type { Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
+
+// Преобразование выбранной сортировки в orderBy Prisma. Поля объекта (имя,
+// категория) сортируются через связь, сумма/гости — по полям самой брони.
+function bookingsOrderBy(
+  sort: BookingsSort,
+): Prisma.BookingOrderByWithRelationInput {
+  switch (sort) {
+    case "name-asc":
+      return { object: { name: "asc" } };
+    case "name-desc":
+      return { object: { name: "desc" } };
+    case "price-desc":
+      return { totalPrice: "desc" };
+    case "price-asc":
+      return { totalPrice: "asc" };
+    case "guests-desc":
+      return { guestsCount: "desc" };
+    case "guests-asc":
+      return { guestsCount: "asc" };
+    case "category":
+      return { object: { objectType: { category: { name: "asc" } } } };
+    default:
+      return { createdAt: "desc" };
+  }
+}
 
 export default async function BookingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; cat?: string }>;
+  searchParams: Promise<{ status?: string; cat?: string; sort?: string }>;
 }) {
-  const { status, cat } = await searchParams;
+  const { status, cat, sort } = await searchParams;
+  const activeSort = (sort as BookingsSort) || DEFAULT_BOOKINGS_SORT;
   const [items, objects, categories] = await Promise.all([
     prisma.booking.findMany({
       where: {
@@ -28,7 +60,7 @@ export default async function BookingsPage({
           ? { object: { objectType: { categoryId: cat } } }
           : {}),
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: bookingsOrderBy(activeSort),
       take: 100,
       include: {
         object: { include: { objectType: { include: { category: true } } } },
@@ -65,6 +97,7 @@ export default async function BookingsPage({
     checkOutTime: o.objectType.checkOutTime,
     baseCapacity: o.objectType.baseCapacity,
     maxCapacity: o.objectType.maxCapacity,
+    basePrice: Number(o.objectType.basePrice),
     slots: o.objectType.slots.map((s) => ({
       id: s.id,
       name: s.name,
@@ -78,6 +111,7 @@ export default async function BookingsPage({
   const statusTabs = [
     { value: "", label: "Все" },
     { value: "PENDING", label: "Ожидают" },
+    { value: "PREPAID", label: "Аванс внесён" },
     { value: "PAID", label: "Оплачены" },
     { value: "CANCELLED", label: "Отменены" },
     { value: "COMPLETED", label: "Завершены" },
@@ -87,6 +121,8 @@ export default async function BookingsPage({
     const params = new URLSearchParams();
     if (next.status) params.set("status", next.status);
     if (next.cat) params.set("cat", next.cat);
+    // Сортировку сохраняем при переходах по фильтрам.
+    if (sort) params.set("sort", sort);
     const qs = params.toString();
     return qs ? `/admin/bookings?${qs}` : "/admin/bookings";
   };
@@ -115,9 +151,10 @@ export default async function BookingsPage({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between flex-wrap gap-2">
+      <div className="flex items-center justify-between flex-wrap gap-2 px-4 md:px-6">
         <h1 className="text-2xl font-bold">Брони</h1>
         <div className="flex items-center gap-2">
+          <BookingsSortSelect value={activeSort} />
           <BookingsBulkDelete
             status={status}
             cat={cat}
@@ -269,11 +306,12 @@ export default async function BookingsPage({
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const map: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" | "success" | "warning" }> = {
+  const map: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" | "success" | "successSolid" | "warning" | "info" }> = {
     PENDING: { label: "Ожидает", variant: "warning" },
-    PAID: { label: "Оплачено", variant: "success" },
+    PREPAID: { label: "Аванс внесён", variant: "info" },
+    PAID: { label: "Оплачено", variant: "successSolid" },
     CANCELLED: { label: "Отменено", variant: "destructive" },
-    COMPLETED: { label: "Завершено", variant: "outline" },
+    COMPLETED: { label: "Завершено", variant: "success" },
     NO_SHOW: { label: "Не пришёл", variant: "destructive" },
   };
   const cfg = map[status] || { label: status, variant: "secondary" as const };
