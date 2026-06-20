@@ -18,7 +18,7 @@ export default async function SettingsPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold px-4 md:px-6">Настройки</h1>
+      <h1 className="text-2xl font-bold">Настройки</h1>
       <SettingsForm initial={map} />
     </div>
   );

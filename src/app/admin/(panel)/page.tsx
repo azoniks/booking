@@ -59,12 +59,15 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold px-4 md:px-6">Дашборд</h1>
+      <h1 className="text-2xl font-bold">Дашборд</h1>
 
-      <BookingsTimeline
-        singleFormObjects={singleFormObjects}
-        groupFormObjects={groupFormObjects}
-      />
+      {/* Шахматка во всю ширину на мобиле (края экрана), обычные отступы на десктопе */}
+      <div className="-mx-4 md:mx-0">
+        <BookingsTimeline
+          singleFormObjects={singleFormObjects}
+          groupFormObjects={groupFormObjects}
+        />
+      </div>
     </div>
   );
 }

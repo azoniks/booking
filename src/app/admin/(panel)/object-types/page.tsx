@@ -18,8 +18,8 @@ export default async function ObjectTypesPage() {
   ]);
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold px-4 md:px-6">Типы объектов</h1>
-      <p className="text-sm text-muted-foreground px-4 md:px-6">
+      <h1 className="text-2xl font-bold">Типы объектов</h1>
+      <p className="text-sm text-muted-foreground">
         Тип задаёт правила для группы объектов: время заезда/выезда (для номеров) или шаг и рабочие часы (для почасовых),
         вместимость, цены и время уборки.
       </p>

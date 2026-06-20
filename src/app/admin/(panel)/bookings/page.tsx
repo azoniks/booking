@@ -151,7 +151,7 @@ export default async function BookingsPage({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between flex-wrap gap-2 px-4 md:px-6">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <h1 className="text-2xl font-bold">Брони</h1>
         <div className="flex items-center gap-2">
           <BookingsSortSelect value={activeSort} />

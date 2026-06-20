@@ -26,7 +26,7 @@ export default async function NewGroupPage() {
   }));
 
   return (
-    <div className="space-y-4 max-w-3xl px-4 md:px-6">
+    <div className="space-y-4 max-w-3xl">
       <Link href="/admin/bookings" className="text-sm text-muted-foreground hover:underline">
         ← Все брони
       </Link>

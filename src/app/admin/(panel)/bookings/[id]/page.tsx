@@ -69,10 +69,10 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
 
   return (
     <div className="space-y-4">
-      <Link href="/admin/bookings" className="text-sm text-muted-foreground hover:underline px-4 md:px-6">
+      <Link href="/admin/bookings" className="text-sm text-muted-foreground hover:underline">
         ← Все брони
       </Link>
-      <div className="flex items-center gap-3 flex-wrap px-4 md:px-6">
+      <div className="flex items-center gap-3 flex-wrap">
         <h1 className="text-2xl font-bold">Бронь {b.publicCode}</h1>
         {/* Для броней в составе заказа статус показываем только у заказа
             (оплата всё-или-ничего на уровне группы). */}
