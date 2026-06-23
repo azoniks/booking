@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -9,23 +8,19 @@ import {
   Sheet,
   SheetContent,
   SheetTrigger,
-  SheetClose,
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
 import { InstallAppHint } from "@/components/client/InstallAppHint";
-
-type NavItem = { href: string; label: string };
+import { AdminNav } from "@/components/admin/AdminNav";
 
 export function AdminMobileNav({
-  navItems,
   siteName,
   logoUrl,
   userEmail,
   mainSiteUrl,
   signOutAction,
 }: {
-  navItems: NavItem[];
   siteName: string;
   logoUrl: string;
   userEmail: string | null | undefined;
@@ -80,27 +75,8 @@ export function AdminMobileNav({
                 </div>
               </div>
             </SheetHeader>
-            <nav className="flex-1 overflow-y-auto p-2 flex flex-col gap-1">
-              {navItems.map((item) => {
-                const active =
-                  item.href === "/admin"
-                    ? pathname === "/admin"
-                    : pathname.startsWith(item.href);
-                return (
-                  <SheetClose asChild key={item.href}>
-                    <Link
-                      href={item.href}
-                      className={`px-3 py-2 rounded-md text-sm ${
-                        active
-                          ? "bg-slate-100 font-medium"
-                          : "hover:bg-slate-100"
-                      }`}
-                    >
-                      {item.label}
-                    </Link>
-                  </SheetClose>
-                );
-              })}
+            <nav className="flex-1 overflow-y-auto p-2">
+              <AdminNav onNavigate={() => setOpen(false)} />
             </nav>
             <div className="p-3 border-t flex flex-col gap-2">
               <div className="[&_button]:w-full">

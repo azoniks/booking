@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { auth, signOut } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { prisma } from "@/lib/db";
 import { ExternalLink } from "lucide-react";
 import { AdminMobileNav } from "@/components/admin/AdminMobileNav";
+import { AdminNav } from "@/components/admin/AdminNav";
 import { InstallAppHint } from "@/components/client/InstallAppHint";
 
 // Переопределяем манифест на админский, чтобы установка PWA из панели
@@ -24,17 +24,6 @@ export async function generateMetadata(): Promise<Metadata> {
     },
   };
 }
-
-const navItems = [
-  { href: "/admin", label: "Дашборд" },
-  { href: "/admin/categories", label: "Категории" },
-  { href: "/admin/object-types", label: "Типы объектов" },
-  { href: "/admin/objects", label: "Объекты" },
-  { href: "/admin/bookings", label: "Брони" },
-  { href: "/admin/blocks", label: "Блокировки" },
-  { href: "/admin/settings", label: "Настройки" },
-  { href: "/admin/admins", label: "Админы" },
-];
 
 export default async function AdminPanelLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
@@ -57,7 +46,6 @@ export default async function AdminPanelLayout({ children }: { children: React.R
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-slate-50">
       <AdminMobileNav
-        navItems={navItems}
         siteName={siteName}
         logoUrl={logoUrl}
         userEmail={session.user?.email}
@@ -79,16 +67,8 @@ export default async function AdminPanelLayout({ children }: { children: React.R
             <div className="text-xs text-muted-foreground truncate">{session.user?.email}</div>
           </div>
         </div>
-        <nav className="flex-1 p-2 flex flex-col gap-1 overflow-y-auto">
-          {navItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="px-3 py-2 rounded-md text-sm hover:bg-slate-100 whitespace-nowrap"
-            >
-              {item.label}
-            </Link>
-          ))}
+        <nav className="flex-1 p-2 overflow-y-auto">
+          <AdminNav />
         </nav>
         <div className="p-2 border-t flex flex-col gap-2">
           <div className="[&_button]:w-full">
