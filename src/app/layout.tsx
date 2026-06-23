@@ -2,7 +2,13 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { CartProvider } from "@/components/client/CartProvider";
+import { SiteConfigProvider } from "@/components/client/SiteConfigProvider";
+import { CookieConsentBanner } from "@/components/client/CookieConsentBanner";
 import { prisma } from "@/lib/db";
+
+const DEFAULT_COOKIE_TEXT =
+  "Мы используем cookie для корректной работы сайта. Продолжая пользоваться сайтом, вы соглашаетесь с обработкой файлов cookie.";
+const DEFAULT_COOKIE_RESHOW_DAYS = 180;
 
 export const viewport: Viewport = {
   themeColor: "#ffffff",
@@ -35,15 +41,47 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // Публичные настройки для клиента: ссылки на документы + кук-баннер.
+  const keys = [
+    "privacyPolicyUrl",
+    "personalDataUrl",
+    "cookieBannerEnabled",
+    "cookieBannerText",
+    "cookieBannerReshowDays",
+  ];
+  const rows = await prisma.settings
+    .findMany({ where: { key: { in: keys } } })
+    .catch(() => []);
+  const map = new Map(rows.map((r) => [r.key, r.value]));
+  const str = (k: string) => {
+    const v = map.get(k);
+    return v === null || v === undefined ? "" : String(v);
+  };
+
+  const privacyPolicyUrl = str("privacyPolicyUrl");
+  const personalDataUrl = str("personalDataUrl");
+  const cookieBannerEnabled = str("cookieBannerEnabled") === "true";
+  const cookieBannerText = str("cookieBannerText") || DEFAULT_COOKIE_TEXT;
+  const reshowRaw = Number(str("cookieBannerReshowDays"));
+  const cookieBannerReshowDays =
+    Number.isFinite(reshowRaw) && reshowRaw > 0 ? reshowRaw : DEFAULT_COOKIE_RESHOW_DAYS;
+
   return (
     <html lang="ru">
       <body className="min-h-screen bg-background text-foreground antialiased">
-        <CartProvider>{children}</CartProvider>
+        <SiteConfigProvider value={{ privacyPolicyUrl, personalDataUrl }}>
+          <CartProvider>{children}</CartProvider>
+        </SiteConfigProvider>
+        <CookieConsentBanner
+          enabled={cookieBannerEnabled}
+          text={cookieBannerText}
+          reshowDays={cookieBannerReshowDays}
+        />
         <Toaster />
       </body>
     </html>

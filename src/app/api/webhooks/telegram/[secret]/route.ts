@@ -93,6 +93,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sec
       `Время: ${formatLocal(booking.startAt)} — ${formatLocal(booking.endAt)}`,
       ...priceLines,
       ``,
+      `Теперь уведомления будут приходить по всем вашим бронями на этот номер телефона — повторно подключать не нужно.`,
       `Я напишу вам перед заездом.`,
     ].join("\n");
     await reply(chatId, greeting);

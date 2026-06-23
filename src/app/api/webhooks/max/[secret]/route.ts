@@ -81,6 +81,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sec
       `Уведомления по брони ${booking.publicCode} подключены.`,
       `Время: ${formatLocal(booking.startAt)} — ${formatLocal(booking.endAt)}`,
       ...priceLines,
+      ``,
+      `Теперь уведомления будут приходить по всем вашим бронями на этот номер — повторно подключать не нужно.`,
     ].join("\n");
     await reply(cfg.apiUrl, cfg.token, chatId, greeting);
     return new Response("ok");
@@ -108,6 +110,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sec
         `Здравствуйте, ${booking.guestName}!`,
         `Уведомления по брони ${booking.publicCode} подключены.`,
         `Время: ${formatLocal(booking.startAt)} — ${formatLocal(booking.endAt)}`,
+        ``,
+        `Теперь уведомления будут приходить по всем вашим бронями на этот номер — повторно подключать не нужно.`,
       ].join("\n");
       await reply(cfg.apiUrl, cfg.token, chatId, greeting);
       return new Response("ok");

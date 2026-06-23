@@ -23,9 +23,10 @@ export default async function HomePage({
             media: { orderBy: [{ isMain: "desc" }, { sortOrder: "asc" }] },
             slots: { select: { id: true, priceOverride: true, startTime: true, endTime: true, endDayOffset: true } },
             objects: {
-              // Аддоны (трейлеры) не показываем как самостоятельные объекты —
-              // они доступны только из карточки родителя.
-              where: { status: "ACTIVE", isAddon: false },
+              // Берём все активные объекты (включая аддоны), чтобы ниже отличить
+              // вид объекта без объектов («скоро») от вида, у которого все
+              // объекты — аддоны (напр. «Трейлер») и который надо скрыть целиком.
+              where: { status: "ACTIVE" },
               orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
               include: {
                 media: { orderBy: [{ isMain: "desc" }, { sortOrder: "asc" }] },
@@ -98,7 +99,16 @@ export default async function HomePage({
               slug: c.slug,
               description: c.description,
               bookingMode: c.bookingMode,
-              objectTypes: c.objectTypes.map((t) => ({
+              objectTypes: c.objectTypes
+                // Аддоны (трейлеры) бронируются только из карточки родителя.
+                // Скрываем вид объекта, у которого ВСЕ активные объекты — аддоны:
+                // как самостоятельный вид он не существует. Виды вообще без
+                // объектов («скоро») оставляем — это отдельный кейс витрины.
+                .filter((t) => {
+                  const visible = t.objects.filter((o) => !o.isAddon);
+                  return visible.length > 0 || t.objects.length === 0;
+                })
+                .map((t) => ({
                 id: t.id,
                 name: t.name,
                 description: t.description,
@@ -137,7 +147,9 @@ export default async function HomePage({
                           : null,
                       }
                     : null,
-                objects: t.objects.map((o) => {
+                objects: t.objects
+                  .filter((o) => !o.isAddon)
+                  .map((o) => {
                   const ownMedia = o.media.map((m) => ({
                     id: m.id,
                     type: m.type,

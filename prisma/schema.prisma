@@ -325,6 +325,19 @@ model Settings {
   updatedAt DateTime @updatedAt
 }
 
+// === Постоянная подписка гостя на уведомления (привязка по телефону) ===
+// Гость один раз заходит в бота (через ?start=<publicCode> любой своей брони),
+// chat_id сохраняется здесь по нормализованному телефону, и уведомления
+// приходят по всем его бронями — текущим и будущим.
+model GuestContact {
+  id             String   @id @default(cuid())
+  phone          String   @unique // нормализованный, напр. "+79991234567"
+  telegramChatId String?
+  maxChatId      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
 // === Лог уведомлений ===
 model NotificationLog {
   id        String              @id @default(cuid())

@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +34,13 @@ export function SettingsForm({ initial }: { initial: Initial }) {
       adminNotifyEmails: String(fd.get("adminNotifyEmails") || "")
         .split(",").map((s) => s.trim()).filter(Boolean),
       paymentPercent: Math.max(1, Math.min(100, Number(fd.get("paymentPercent") || 100))),
+
+      privacyPolicyUrl: String(fd.get("privacyPolicyUrl") || "").trim(),
+      personalDataUrl: String(fd.get("personalDataUrl") || "").trim(),
+      cookieBannerEnabled: fd.get("cookieBannerEnabled") === "on" ? "true" : "false",
+      cookieBannerText: String(fd.get("cookieBannerText") || "").trim(),
+      cookieBannerReshowDays: Math.max(1, Math.floor(Number(fd.get("cookieBannerReshowDays") || 180))),
+
       bookingRateLimitMax: Math.max(1, Math.floor(Number(fd.get("bookingRateLimitMax") || 5))),
       bookingRateLimitWindowMin: Math.max(
         1,
@@ -168,6 +176,66 @@ export function SettingsForm({ initial }: { initial: Initial }) {
                 />
                 <p className="text-xs text-muted-foreground mt-1">
                   100 — полная оплата онлайн. На уровне типа объекта можно переопределить.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Документы и cookie</CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <Label>Ссылка на политику конфиденциальности</Label>
+                <Input
+                  name="privacyPolicyUrl"
+                  type="url"
+                  defaultValue={String(initial.privacyPolicyUrl ?? "")}
+                  placeholder="https://example.com/privacy"
+                />
+              </div>
+              <div>
+                <Label>Ссылка на согласие на обработку ПДн</Label>
+                <Input
+                  name="personalDataUrl"
+                  type="url"
+                  defaultValue={String(initial.personalDataUrl ?? "")}
+                  placeholder="https://example.com/personal-data"
+                />
+              </div>
+              <p className="md:col-span-2 text-xs text-muted-foreground -mt-1">
+                Эти ссылки подставляются в чекбокс согласия при бронировании.
+              </p>
+
+              <div className="md:col-span-2 flex items-center gap-2 pt-2 border-t">
+                <input
+                  type="checkbox"
+                  id="cookieBannerEnabled"
+                  name="cookieBannerEnabled"
+                  defaultChecked={initial.cookieBannerEnabled === "true"}
+                />
+                <Label htmlFor="cookieBannerEnabled">Показывать баннер о cookie</Label>
+              </div>
+              <div className="md:col-span-2">
+                <Label>Текст баннера о cookie</Label>
+                <Textarea
+                  name="cookieBannerText"
+                  rows={2}
+                  defaultValue={String(initial.cookieBannerText ?? "")}
+                  placeholder="Мы используем cookie для корректной работы сайта…"
+                />
+              </div>
+              <div>
+                <Label>Повторно показывать через, дней</Label>
+                <Input
+                  name="cookieBannerReshowDays"
+                  type="number"
+                  min={1}
+                  defaultValue={Number(initial.cookieBannerReshowDays ?? 180)}
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Через сколько дней после согласия баннер покажется снова.
                 </p>
               </div>
             </CardContent>

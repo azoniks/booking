@@ -43,6 +43,42 @@ function intersects(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date) {
   return aStart.getTime() < bEnd.getTime() && bStart.getTime() < aEnd.getTime();
 }
 
+// Состояние одного слота на конкретную дату: занят (пересекается с бронью/блоком
+// с учётом уборки) или прошёл.
+function slotStateFor(
+  slot: Slot,
+  dateISO: string,
+  busy: BusyInterval[],
+  cleaningMinutes: number,
+): { busy: boolean; past: boolean; startAt: Date; endAt: Date } {
+  const { startAt, endAt } = slotIntervalsForDate(slot, dateISO);
+  const blockedUntil = new Date(endAt.getTime() + cleaningMinutes * 60_000);
+  const past = blockedUntil.getTime() <= Date.now();
+  let occupied = false;
+  for (const iv of busy) {
+    if (intersects(startAt, blockedUntil, new Date(iv.startAt), new Date(iv.endAt))) {
+      occupied = true;
+      break;
+    }
+  }
+  return { busy: occupied, past, startAt, endAt };
+}
+
+// День недоступен (красный), если все слоты этого дня заняты или прошли.
+function dayUnavailable(
+  date: Date,
+  slots: Slot[],
+  busy: BusyInterval[],
+  cleaningMinutes: number,
+): boolean {
+  if (slots.length === 0) return true;
+  const dISO = isoDate(date);
+  return slots.every((slot) => {
+    const st = slotStateFor(slot, dISO, busy, cleaningMinutes);
+    return st.busy || st.past;
+  });
+}
+
 export function SlotPicker({
   busy,
   cleaningMinutes,
@@ -67,19 +103,8 @@ export function SlotPicker({
   const slotStates = useMemo(() => {
     if (!dateISO) return [] as { slot: Slot; busy: boolean; past: boolean; startAt: Date; endAt: Date }[];
     return slots.map((slot) => {
-      const { startAt, endAt } = slotIntervalsForDate(slot, dateISO);
-      const blockedUntil = new Date(endAt.getTime() + cleaningMinutes * 60_000);
-      const past = blockedUntil.getTime() <= Date.now();
-      let occupied = false;
-      for (const iv of busy) {
-        const bs = new Date(iv.startAt);
-        const be = new Date(iv.endAt);
-        if (intersects(startAt, blockedUntil, bs, be)) {
-          occupied = true;
-          break;
-        }
-      }
-      return { slot, busy: occupied, past, startAt, endAt };
+      const st = slotStateFor(slot, dateISO, busy, cleaningMinutes);
+      return { slot, busy: st.busy, past: st.past, startAt: st.startAt, endAt: st.endAt };
     });
   }, [slots, dateISO, busy, cleaningMinutes]);
 
@@ -96,18 +121,29 @@ export function SlotPicker({
           disabled={(d) => {
             const t = new Date();
             t.setHours(0, 0, 0, 0);
-            return d.getTime() < t.getTime() - DAY_MS;
+            if (d.getTime() < t.getTime() - DAY_MS) return true;
+            return dayUnavailable(d, slots, busy, cleaningMinutes);
           }}
-          // Будущие дни (доступные для выбора) подсвечиваем зелёным; занятость
-          // конкретных слотов внутри дня показываем ниже на карточках.
+          // Будущие дни со свободными слотами подсвечиваем зелёным; дни, где все
+          // слоты заняты/прошли — красным. Занятость конкретных слотов внутри дня
+          // показываем ниже на карточках.
           modifiers={{
+            booked: (d) => {
+              const t = new Date();
+              t.setHours(0, 0, 0, 0);
+              return d.getTime() >= t.getTime() - DAY_MS && dayUnavailable(d, slots, busy, cleaningMinutes);
+            },
             available: (d) => {
               const t = new Date();
               t.setHours(0, 0, 0, 0);
-              return d.getTime() >= t.getTime() - DAY_MS;
+              return (
+                d.getTime() >= t.getTime() - DAY_MS &&
+                !dayUnavailable(d, slots, busy, cleaningMinutes)
+              );
             },
           }}
           modifiersClassNames={{
+            booked: "bg-red-100 text-red-700 line-through",
             available: "text-emerald-700 hover:bg-emerald-50",
           }}
           locale={ru}

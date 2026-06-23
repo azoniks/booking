@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { formatLocal } from "@/lib/time";
 import { sendTelegram } from "./telegram";
 import { sendMax } from "./max";
-import { sendToGuestAll } from "./guest-messenger";
+import { sendToGuestAll, guestHasSubscription } from "./guest-messenger";
 
 const PAYMENT_RETRY_KIND = "payment_retry";
 
@@ -245,10 +245,15 @@ export async function sendPaidNotifications(bookingId: string) {
   });
   const ch: Record<string, string> = {};
   for (const s of channels) ch[s.key] = String(s.value ?? "");
-  if (ch.telegramClientEnabled === "true" && ch.telegramBotUsername) {
+  // Не показываем ссылку-подписку гостю, который уже подписан (по телефону).
+  const [tgSubscribed, maxSubscribed] = await Promise.all([
+    guestHasSubscription(b.guestPhone, "telegram"),
+    guestHasSubscription(b.guestPhone, "max"),
+  ]);
+  if (ch.telegramClientEnabled === "true" && ch.telegramBotUsername && !tgSubscribed) {
     guestLines.push(``, `Получать уведомления в Telegram: https://t.me/${ch.telegramBotUsername}?start=${b.publicCode}`);
   }
-  if (ch.maxClientEnabled === "true" && ch.maxBotUsername) {
+  if (ch.maxClientEnabled === "true" && ch.maxBotUsername && !maxSubscribed) {
     guestLines.push(`Получать уведомления в MAX: https://max.ru/${ch.maxBotUsername}?start=${b.publicCode}`);
   }
   guestLines.push(``, `До встречи!`);

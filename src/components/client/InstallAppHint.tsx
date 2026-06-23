@@ -58,7 +58,6 @@ export function InstallAppHint({
   showButton?: boolean;
 }) {
   const title = appTitle ?? siteName;
-  const sessionKey = `${dismissKey}:session`;
 
   const [mounted, setMounted] = useState(false);
   const [platform, setPlatform] = useState<Platform>("other");
@@ -66,7 +65,6 @@ export function InstallAppHint({
   const [deferred, setDeferred] = useState<BIPEvent | null>(null);
   const [open, setOpen] = useState(false);
   const [permDismissed, setPermDismissed] = useState(false);
-  const [sessionDismissed, setSessionDismissed] = useState(false);
   const [bannerReady, setBannerReady] = useState(false);
 
   useEffect(() => {
@@ -75,7 +73,6 @@ export function InstallAppHint({
     setStandalone(isStandalone());
     try {
       setPermDismissed(localStorage.getItem(dismissKey) === "1");
-      setSessionDismissed(sessionStorage.getItem(sessionKey) === "1");
     } catch {}
 
     const onPrompt = (e: Event) => {
@@ -96,7 +93,7 @@ export function InstallAppHint({
       window.removeEventListener("appinstalled", onInstalled);
       window.clearTimeout(t);
     };
-  }, [dismissKey, sessionKey]);
+  }, [dismissKey]);
 
   if (!mounted || standalone) return null;
 
@@ -121,15 +118,16 @@ export function InstallAppHint({
     setOpen(false);
   }
 
-  function handleSessionDismiss() {
+  // Закрытие крестиком — постоянное (localStorage): баннер не появится снова,
+  // пока пользователь не очистит данные сайта. Так не докучаем каждый визит.
+  function handleClose() {
     try {
-      sessionStorage.setItem(sessionKey, "1");
+      localStorage.setItem(dismissKey, "1");
     } catch {}
-    setSessionDismissed(true);
+    setPermDismissed(true);
   }
 
-  const bannerVisible =
-    showBanner && bannerReady && !permDismissed && !sessionDismissed;
+  const bannerVisible = showBanner && bannerReady && !permDismissed;
 
   return (
     <>
@@ -180,7 +178,7 @@ export function InstallAppHint({
             canPrompt={Boolean(deferred)}
             onInstall={handleInstall}
             onDetails={() => setOpen(true)}
-            onClose={handleSessionDismiss}
+            onClose={handleClose}
           />,
           document.body,
         )}

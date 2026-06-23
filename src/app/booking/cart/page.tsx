@@ -9,6 +9,7 @@ import {
   type ScheduleState,
 } from "@/components/client/ObjectSchedulePicker";
 import { useInvisibleCaptcha } from "@/components/client/useInvisibleCaptcha";
+import { ConsentCheckbox } from "@/components/client/ConsentCheckbox";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,6 +25,7 @@ export default function CartPage() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [comment, setComment] = useState("");
+  const [agreed, setAgreed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -38,7 +40,7 @@ export default function CartPage() {
     items.length > 0 && items.every((i) => states[i.id]?.valid);
 
   const contactValid = name.trim().length >= 2 && /\S+@\S+\.\S+/.test(email) && phone.trim().length >= 5;
-  const canSubmit = allValid && contactValid && !submitting;
+  const canSubmit = allValid && contactValid && agreed && !submitting;
 
   const fmt = (n: number) => n.toLocaleString("ru-RU");
 
@@ -178,6 +180,8 @@ export default function CartPage() {
                     Укажите дату/время и число гостей для каждого объекта.
                   </p>
                 )}
+
+                <ConsentCheckbox checked={agreed} onChange={setAgreed} id="consent-cart" />
 
                 <Button className="w-full" disabled={!canSubmit} onClick={submit}>
                   {submitting

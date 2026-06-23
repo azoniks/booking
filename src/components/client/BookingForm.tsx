@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import type { DateRange } from "react-day-picker";
 import { Info, ShoppingCart, Check } from "lucide-react";
 import { useCart } from "./CartProvider";
+import { ConsentCheckbox } from "./ConsentCheckbox";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -194,6 +195,7 @@ export function BookingForm({
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [comment, setComment] = useState("");
+  const [agreed, setAgreed] = useState(false);
 
   const [captcha, setCaptcha] = useState<{
     enabled: boolean;
@@ -909,6 +911,9 @@ export function BookingForm({
             </div>
           ) : (
             <>
+              <div className="border-t pt-4">
+                <ConsentCheckbox checked={agreed} onChange={setAgreed} id="consent-single" />
+              </div>
               <div className="border-t pt-4 space-y-2">
                 {(() => {
                   if (price <= 0) {
@@ -918,7 +923,7 @@ export function BookingForm({
                           <div className="text-xs text-muted-foreground">К оплате</div>
                           <div className="text-2xl font-bold text-gold">0 ₽</div>
                         </div>
-                        <Button type="submit" disabled={submitting || !canSubmit}>
+                        <Button type="submit" disabled={submitting || !canSubmit || !agreed}>
                           {submitting ? "Создание…" : "Забронировать и оплатить"}
                         </Button>
                       </div>
@@ -951,7 +956,7 @@ export function BookingForm({
                             {prepay.toLocaleString("ru-RU")} ₽
                           </div>
                         </div>
-                        <Button type="submit" disabled={submitting || !canSubmit}>
+                        <Button type="submit" disabled={submitting || !canSubmit || !agreed}>
                           {submitting ? "Создание…" : "Забронировать"}
                         </Button>
                       </div>
@@ -964,7 +969,7 @@ export function BookingForm({
                           {price.toLocaleString("ru-RU")} ₽
                         </div>
                       </div>
-                      <Button type="submit" disabled={submitting || !canSubmit}>
+                      <Button type="submit" disabled={submitting || !canSubmit || !agreed}>
                         {submitting ? "Создание…" : "Забронировать и оплатить"}
                       </Button>
                     </div>

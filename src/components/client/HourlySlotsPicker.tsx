@@ -17,6 +17,12 @@ export interface HourlySettings {
 
 const TZ_OFFSET_MIN = 180; // Europe/Moscow
 
+function isPastDay(d: Date): boolean {
+  const t = new Date();
+  t.setHours(0, 0, 0, 0);
+  return d < t;
+}
+
 function makeLocalDate(date: Date, hh: number, mm: number): Date {
   const y = date.getFullYear();
   const m = date.getMonth();
@@ -50,6 +56,32 @@ function isSlotBusy(slotStart: Date, slotEnd: Date, busy: BusyInterval[]): boole
     if (slotStart.getTime() < e && s < slotEnd.getTime()) return true;
   }
   return false;
+}
+
+// День недоступен (красный), если в нём не осталось ни одного свободного
+// непрерывного окна длиной ≥ minBookingHours: всё занято, либо оставшиеся
+// промежутки (в т.ч. хвосты в начале/конце дня) короче минимальной брони.
+// Прошедшие ячейки тоже считаются недоступными.
+function hourlyDayUnavailable(date: Date, settings: HourlySettings, busy: BusyInterval[]): boolean {
+  const points = buildSlots(date, settings);
+  if (points.length < 2) return true;
+  const now = Date.now();
+  // Ячейки = промежутки между соседними точками сетки (последняя точка — только окончание).
+  let maxRun = 0;
+  let run = 0;
+  for (let i = 0; i < points.length - 1; i++) {
+    const cellStart = points[i].date;
+    const cellEnd = points[i + 1].date;
+    const available = cellStart.getTime() >= now && !isSlotBusy(cellStart, cellEnd, busy);
+    if (available) {
+      run++;
+      if (run > maxRun) maxRun = run;
+    } else {
+      run = 0;
+    }
+  }
+  // maxRun ячеек = maxRun * hourlyStepMinutes свободных минут подряд.
+  return maxRun * settings.hourlyStepMinutes < settings.minBookingHours * 60;
 }
 
 type EndState =
@@ -203,10 +235,14 @@ export function HourlySlotsPicker({
             onChangeDate(d);
             onChangeRange(null, null);
           }}
-          disabled={(d) => {
-            const t = new Date();
-            t.setHours(0, 0, 0, 0);
-            return d < t;
+          disabled={(d) => isPastDay(d) || hourlyDayUnavailable(d, settings, busy)}
+          modifiers={{
+            booked: (d) => !isPastDay(d) && hourlyDayUnavailable(d, settings, busy),
+            available: (d) => !isPastDay(d) && !hourlyDayUnavailable(d, settings, busy),
+          }}
+          modifiersClassNames={{
+            booked: "bg-red-100 text-red-700 line-through",
+            available: "bg-emerald-50 text-emerald-700 hover:bg-emerald-100",
           }}
           locale={ru}
           weekStartsOn={1}
