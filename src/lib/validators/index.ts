@@ -1,4 +1,15 @@
 import { z } from "zod";
+import { isCompleteRuPhone } from "@/lib/phone";
+
+// Телефон гостя: обязателен и должен быть указан полностью (+7 и 10 цифр).
+// Единый источник правды для всех точек создания брони (клиент и админ).
+export const guestPhoneSchema = z
+  .string()
+  .trim()
+  .max(30)
+  .refine(isCompleteRuPhone, {
+    message: "Укажите телефон полностью в формате +7 (XXX) XXX-XX-XX",
+  });
 
 export const BookingModeEnum = z.enum(["DAILY", "HOURLY", "FULL_DAY"]);
 export const ObjectStatusEnum = z.enum(["ACTIVE", "HIDDEN", "MAINTENANCE"]);
@@ -211,7 +222,7 @@ export const publicBookingSchema = z
     guestsCount: z.coerce.number().int().min(1).max(1000),
     guestName: z.string().min(2).max(100),
     guestEmail: z.string().email(),
-    guestPhone: z.string().min(5).max(30),
+    guestPhone: guestPhoneSchema,
     guestComment: z.string().max(1000).optional(),
   });
 
@@ -232,7 +243,7 @@ const bookingGroupItemSchema = z.object({
 export const publicBookingGroupSchema = z.object({
   guestName: z.string().min(2).max(100),
   guestEmail: z.string().email(),
-  guestPhone: z.string().min(5).max(30),
+  guestPhone: guestPhoneSchema,
   guestComment: z.string().max(1000).optional(),
   items: z.array(bookingGroupItemSchema).min(1).max(20),
 });
@@ -257,11 +268,12 @@ export function paymentStateToStatus(state: PaymentState): {
 }
 
 // Админское ручное создание группового заказа: email необязателен,
+// телефон обязателен и должен быть указан полностью (как у клиента),
 // paymentState задаёт стартовый статус оплаты (без Tinkoff).
 export const adminBookingGroupSchema = z.object({
   guestName: z.string().min(2).max(100),
   guestEmail: z.string().email().or(z.literal("")).optional(),
-  guestPhone: z.string().min(1).max(30),
+  guestPhone: guestPhoneSchema,
   guestComment: z.string().max(1000).optional(),
   paymentState: paymentStateSchema,
   items: z.array(bookingGroupItemSchema).min(1).max(20),
@@ -280,8 +292,9 @@ export const bookingRescheduleSchema = z.object({
   guestsCount: z.coerce.number().int().min(1).max(1000),
 });
 
-// Админская ручная бронь: email/телефон необязательны (можно вписать «-»),
-// paymentState задаёт стартовый статус оплаты и пропускает Tinkoff.
+// Админская ручная бронь: email необязателен, телефон обязателен и должен
+// быть указан полностью (как у клиента); paymentState задаёт стартовый
+// статус оплаты и пропускает Tinkoff.
 export const adminBookingSchema = z.object({
   objectId: z.string().min(1),
   checkInDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
@@ -294,7 +307,7 @@ export const adminBookingSchema = z.object({
   guestsCount: z.coerce.number().int().min(1).max(1000),
   guestName: z.string().min(2).max(100),
   guestEmail: z.string().email().or(z.literal("")).optional(),
-  guestPhone: z.string().min(1).max(30),
+  guestPhone: guestPhoneSchema,
   guestComment: z.string().max(1000).optional(),
   paymentState: paymentStateSchema,
 });

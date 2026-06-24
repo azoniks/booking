@@ -9,6 +9,7 @@ import {
   getClientIp,
   recordLoginFailure,
 } from "./rate-limit";
+import { recordAudit } from "./audit";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
@@ -49,6 +50,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         await prisma.adminUser.update({
           where: { id: user.id },
           data: { lastLoginAt: new Date() },
+        });
+
+        await recordAudit({
+          actor: { id: user.id, name: user.name, email: user.email },
+          action: "LOGIN",
+          entity: "AUTH",
+          entityId: user.id,
+          summary: `Вход в админку: ${user.name} (${user.email})`,
+          ip,
         });
 
         return {

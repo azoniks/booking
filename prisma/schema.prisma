@@ -358,3 +358,80 @@ enum NotificationChannel {
   TELEGRAM
   MAX
 }
+
+// === Аудит действий администраторов ===
+// Кто и что менял в админке. Данные об авторе хранятся снимком (actorName/
+// actorEmail), чтобы запись осталась читаемой после переименования/удаления
+// админа. meta — опциональные детали (изменённые поля было→стало и т.п.).
+model AuditLog {
+  id         String      @id @default(cuid())
+  createdAt  DateTime    @default(now())
+  actorId    String?
+  actorName  String
+  actorEmail String
+  action     AuditAction
+  entity     AuditEntity
+  entityId   String?
+  summary    String
+  meta       Json?
+  ip         String?
+
+  @@index([createdAt])
+  @@index([entity])
+  @@index([action])
+  @@index([actorId])
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  CANCEL
+  REFUND
+  LOGIN
+  LOGOUT
+}
+
+enum AuditEntity {
+  BOOKING
+  BOOKING_GROUP
+  OBJECT
+  OBJECT_TYPE
+  CATEGORY
+  SLOT
+  BLOCK
+  SETTINGS
+  ADMIN
+  AUTH
+}
+
+// === Лог ошибок сервера ===
+// Реальные сбои (неожиданные исключения, упавшие ручки API, ошибки рендера и
+// планировщика) — для наблюдаемости за здоровьем модуля. resolvedAt помечает
+// разобранные записи.
+model ServerErrorLog {
+  id         String      @id @default(cuid())
+  createdAt  DateTime    @default(now())
+  source     ErrorSource @default(API)
+  method     String?
+  path       String?
+  statusCode Int?
+  // Что пытались сделать (человекочитаемо) и детали попытки (какой объект и т.п.).
+  action     String?
+  context    Json?
+  message    String
+  stack      String?
+  digest     String?
+  resolvedAt DateTime?
+
+  @@index([createdAt])
+  @@index([source])
+  @@index([resolvedAt])
+}
+
+enum ErrorSource {
+  API
+  RENDER
+  SCHEDULER
+  OTHER
+}

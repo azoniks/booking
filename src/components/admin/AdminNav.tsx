@@ -46,6 +46,7 @@ const NAV: NavEntry[] = [
     items: [
       { href: "/admin/settings", label: "Настройки" },
       { href: "/admin/admins", label: "Админы" },
+      { href: "/admin/logs", label: "Логи" },
     ],
   },
 ];

@@ -3,6 +3,8 @@ import { prisma } from "@/lib/db";
 import { ok, handleError, requireAdmin, unauth } from "@/lib/api-utils";
 import { objectTypeCreateSchema } from "@/lib/validators";
 import { isEmptyRichText, sanitizeRichText } from "@/lib/sanitize";
+import { recordAudit, actorFromSession } from "@/lib/audit";
+import { getClientIp } from "@/lib/rate-limit";
 
 export async function GET() {
   if (!(await requireAdmin())) return unauth();
@@ -14,7 +16,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  if (!(await requireAdmin())) return unauth();
+  const session = await requireAdmin();
+  if (!session) return unauth();
   try {
     const body = objectTypeCreateSchema.parse(await req.json());
     if (typeof body.description === "string") {
@@ -23,8 +26,16 @@ export async function POST(req: NextRequest) {
         : sanitizeRichText(body.description);
     }
     const created = await prisma.objectType.create({ data: body });
+    await recordAudit({
+      actor: actorFromSession(session),
+      action: "CREATE",
+      entity: "OBJECT_TYPE",
+      entityId: created.id,
+      summary: `Создал тип объекта «${created.name}»`,
+      ip: getClientIp(req.headers),
+    });
     return ok(created, 201);
   } catch (e) {
-    return handleError(e);
+    return handleError(e, { req, action: "Создание типа объекта" });
   }
 }

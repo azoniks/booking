@@ -3,8 +3,9 @@ import { prisma } from "@/lib/db";
 import { ok, handleError, requireAdmin, unauth } from "@/lib/api-utils";
 import { settingsUpdateSchema } from "@/lib/validators";
 import { SECRET_KEYS, MASK, isMaskOrEmpty } from "@/lib/settings-keys";
-import { invalidateBookingRateLimitCache } from "@/lib/rate-limit";
+import { invalidateBookingRateLimitCache, getClientIp } from "@/lib/rate-limit";
 import { invalidateCaptchaConfigCache } from "@/lib/captcha";
+import { recordAudit, actorFromSession } from "@/lib/audit";
 
 export async function GET() {
   if (!(await requireAdmin())) return unauth();
@@ -21,10 +22,12 @@ export async function GET() {
 }
 
 export async function PUT(req: NextRequest) {
-  if (!(await requireAdmin())) return unauth();
+  const session = await requireAdmin();
+  if (!session) return unauth();
   try {
     const body = settingsUpdateSchema.parse(await req.json());
     let updated = 0;
+    const changedKeys: string[] = [];
     for (const [key, value] of Object.entries(body)) {
       if (SECRET_KEYS.has(key) && isMaskOrEmpty(value)) continue;
       await prisma.settings.upsert({
@@ -33,11 +36,23 @@ export async function PUT(req: NextRequest) {
         update: { value: value as object },
       });
       updated++;
+      changedKeys.push(key);
     }
     invalidateBookingRateLimitCache();
     invalidateCaptchaConfigCache();
+    if (updated > 0) {
+      await recordAudit({
+        actor: actorFromSession(session),
+        action: "UPDATE",
+        entity: "SETTINGS",
+        // Секретные ключи в meta не пишем — только их имена.
+        summary: `Изменил настройки: ${changedKeys.join(", ")}`,
+        meta: { keys: changedKeys },
+        ip: getClientIp(req.headers),
+      });
+    }
     return ok({ updated });
   } catch (e) {
-    return handleError(e);
+    return handleError(e, { req, action: "Изменение настроек" });
   }
 }

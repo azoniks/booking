@@ -12,7 +12,9 @@ import { useInvisibleCaptcha } from "@/components/client/useInvisibleCaptcha";
 import { ConsentCheckbox } from "@/components/client/ConsentCheckbox";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PhoneInput } from "@/components/ui/phone-input";
 import { Label } from "@/components/ui/label";
+import { isCompleteRuPhone } from "@/lib/phone";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -39,7 +41,8 @@ export default function CartPage() {
   const allValid =
     items.length > 0 && items.every((i) => states[i.id]?.valid);
 
-  const contactValid = name.trim().length >= 2 && /\S+@\S+\.\S+/.test(email) && phone.trim().length >= 5;
+  const contactValid =
+    name.trim().length >= 2 && /\S+@\S+\.\S+/.test(email) && isCompleteRuPhone(phone);
   const canSubmit = allValid && contactValid && agreed && !submitting;
 
   const fmt = (n: number) => n.toLocaleString("ru-RU");
@@ -139,7 +142,12 @@ export default function CartPage() {
                   </div>
                   <div>
                     <Label className="text-xs">Телефон</Label>
-                    <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+7…" required />
+                    <PhoneInput value={phone} onChange={setPhone} required />
+                    {phone.trim().length > 0 && !isCompleteRuPhone(phone) && (
+                      <p className="mt-1 text-xs text-destructive">
+                        Укажите телефон полностью: +7 (XXX) XXX-XX-XX
+                      </p>
+                    )}
                   </div>
                   <div className="sm:col-span-2">
                     <Label className="text-xs">Email</Label>

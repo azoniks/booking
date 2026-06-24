@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/sheet";
 import { toast } from "@/components/ui/use-toast";
 import { formatSlotEndSuffix } from "@/lib/slots";
+import { isCompleteRuPhone } from "@/lib/phone";
 import {
   ObjectSortSelect,
   sortObjects,
@@ -80,7 +81,6 @@ export function AdminBookingCreateForm({
   };
   const [submitting, setSubmitting] = useState(false);
   const [objectId, setObjectId] = useState(objects[0]?.id || "");
-  const [hourlyMode, setHourlyMode] = useState<"slot" | "custom">("slot");
   const [slotId, setSlotId] = useState("");
   // Значение даты заезда/начала — управляемое, чтобы предзаполнять из initialDate.
   const [dateValue, setDateValue] = useState(initialDate ?? "");
@@ -137,6 +137,15 @@ export function AdminBookingCreateForm({
       guestPhone: String(fd.get("guestPhone") || "").trim(),
       guestComment: String(fd.get("guestComment") || "").trim() || undefined,
     };
+    // Телефон обязателен и должен быть указан полностью (те же условия, что у клиента).
+    if (!isCompleteRuPhone(guest.guestPhone)) {
+      toast({
+        title: "Укажите телефон полностью",
+        description: "Формат: +7 (XXX) XXX-XX-XX",
+        variant: "destructive",
+      });
+      return;
+    }
     // Две галочки оплаты: полная оплата приоритетнее аванса.
     const fullyPaid = fd.get("fullyPaid") === "on";
     const prepaidMade = fd.get("prepaidMade") === "on";
@@ -154,7 +163,8 @@ export function AdminBookingCreateForm({
         return;
       }
       mainItem.bookingDate = date;
-    } else if (hourlyMode === "slot") {
+    } else if (selected.slots.length > 0) {
+      // У типа есть слоты — бронь только по слоту (произвольный интервал запрещён).
       if (!slotId) {
         toast({ title: "Выберите слот", variant: "destructive" });
         return;
@@ -162,6 +172,7 @@ export function AdminBookingCreateForm({
       mainItem.slotId = slotId;
       mainItem.slotDate = String(fd.get("slotDate") || "");
     } else {
+      // Тип без слотов — допускается только произвольный интервал.
       const startAtLocal = String(fd.get("startAt") || "");
       const endAtLocal = String(fd.get("endAt") || "");
       if (!startAtLocal || !endAtLocal) {
@@ -308,35 +319,7 @@ export function AdminBookingCreateForm({
 
               {selected?.bookingMode === "HOURLY" && (
                 <>
-                  <div className="md:col-span-2 flex gap-2 items-center flex-wrap">
-                    <Label className="!mb-0">Режим:</Label>
-                    <div className="flex gap-1">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant={hourlyMode === "slot" ? "default" : "outline"}
-                        onClick={() => setHourlyMode("slot")}
-                        disabled={selected.slots.length === 0}
-                      >
-                        Слот
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant={hourlyMode === "custom" ? "default" : "outline"}
-                        onClick={() => setHourlyMode("custom")}
-                      >
-                        Произвольно
-                      </Button>
-                    </div>
-                    {selected.slots.length === 0 && (
-                      <span className="text-xs text-muted-foreground">
-                        у типа нет слотов — только произвольный интервал
-                      </span>
-                    )}
-                  </div>
-
-                  {hourlyMode === "slot" && selected.slots.length > 0 ? (
+                  {selected.slots.length > 0 ? (
                     <>
                       <div>
                         <Label>Слот</Label>
@@ -368,6 +351,9 @@ export function AdminBookingCreateForm({
                     </>
                   ) : (
                     <>
+                      <p className="md:col-span-2 text-xs text-muted-foreground">
+                        У типа нет слотов — укажите произвольный интервал.
+                      </p>
                       <div>
                         <Label>Начало</Label>
                         <Input name="startAt" type="datetime-local" required onClick={openPicker} />
@@ -436,7 +422,13 @@ export function AdminBookingCreateForm({
               </div>
               <div>
                 <Label>Телефон</Label>
-                <PhoneInput name="guestPhone" required />
+                <PhoneInput
+                  name="guestPhone"
+                  required
+                  pattern="\+7 \(\d{3}\) \d{3}-\d{2}-\d{2}"
+                  maxLength={18}
+                  title="Формат: +7 (XXX) XXX-XX-XX"
+                />
               </div>
               <div>
                 <Label>Email (опц.)</Label>

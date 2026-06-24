@@ -1,6 +1,17 @@
 import { prisma } from "./db";
 import { cancelExpiredBookings } from "./booking-service";
 import { sendReminder } from "./notifications/email";
+import { recordServerError } from "./server-errors";
+
+function logSchedulerError(job: string, e: unknown) {
+  console.error(`[scheduler] ${job}:`, e);
+  void recordServerError({
+    source: "SCHEDULER",
+    path: `scheduler:${job}`,
+    message: e instanceof Error ? e.message : String(e),
+    stack: e instanceof Error ? e.stack : null,
+  });
+}
 
 let started = false;
 
@@ -14,7 +25,7 @@ export function startScheduler() {
       const n = await cancelExpiredBookings();
       if (n > 0) console.log(`[scheduler] cancelled ${n} expired pending bookings`);
     } catch (e) {
-      console.error("[scheduler] cancel:", e);
+      logSchedulerError("cancel", e);
     }
   }, 60_000);
 
@@ -40,7 +51,7 @@ export function startScheduler() {
         console.log(`[scheduler] sent ${targets.length} reminders`);
       }
     } catch (e) {
-      console.error("[scheduler] reminders:", e);
+      logSchedulerError("reminders", e);
     }
   }, 60 * 60_000);
 

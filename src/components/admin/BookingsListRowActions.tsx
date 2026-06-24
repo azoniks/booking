@@ -55,35 +55,42 @@ export function BookingRowDelete({
   );
 }
 
+export type BookingsBulkFilters = {
+  status?: string;
+  q?: string;
+  type?: string;
+  obj?: string;
+  from?: string;
+  to?: string;
+  dateField?: string;
+};
+
 export function BookingsBulkDelete({
-  status,
-  cat,
+  filters,
   visibleCount,
 }: {
-  status?: string;
-  cat?: string;
+  filters: BookingsBulkFilters;
   visibleCount: number;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
 
   async function onClick() {
-    const filterDesc = [
-      status ? `статус=${status}` : null,
-      cat ? `категория` : null,
-    ]
-      .filter(Boolean)
-      .join(", ");
-    const msg = filterDesc
-      ? `Удалить ВСЕ брони по фильтру (${filterDesc})? Будет затронуто примерно ${visibleCount}+ записей. Это необратимо.`
+    // Считаем активные фильтры (dateField — лишь модификатор периода, не фильтр).
+    const hasFilters = Object.entries(filters).some(
+      ([k, v]) => k !== "dateField" && v,
+    );
+    const msg = hasFilters
+      ? `Удалить ВСЕ брони по текущему фильтру? Будет затронуто примерно ${visibleCount}+ записей. Это необратимо.`
       : `Удалить ВСЕ брони (без фильтра)? Будет удалено ${visibleCount}+ записей. Это необратимо.`;
     if (!confirm(msg)) return;
     if (!confirm("Подтвердите ещё раз: удалить выбранные брони?")) return;
 
     const params = new URLSearchParams();
     params.set("confirm", "1");
-    if (status) params.set("status", status);
-    if (cat) params.set("cat", cat);
+    for (const [key, value] of Object.entries(filters)) {
+      if (value) params.set(key, value);
+    }
 
     setBusy(true);
     try {

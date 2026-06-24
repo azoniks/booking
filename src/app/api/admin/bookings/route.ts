@@ -4,6 +4,9 @@ import { ok, handleError, requireAdmin, unauth } from "@/lib/api-utils";
 import { Prisma } from "@prisma/client";
 import { adminBookingSchema, paymentStateToStatus } from "@/lib/validators";
 import { createBooking } from "@/lib/booking-service";
+import { buildBookingsWhere } from "@/lib/booking-filters";
+import { recordAudit, actorFromSession } from "@/lib/audit";
+import { getClientIp } from "@/lib/rate-limit";
 
 export async function GET(req: NextRequest) {
   if (!(await requireAdmin())) return unauth();
@@ -34,9 +37,20 @@ export async function GET(req: NextRequest) {
 // Ручное создание брони администратором: использует тот же createBooking
 // (проверка пересечений, расчёт цены), но без Tinkoff и сразу с нужным статусом.
 export async function POST(req: NextRequest) {
-  if (!(await requireAdmin())) return unauth();
+  const session = await requireAdmin();
+  if (!session) return unauth();
+  const attempt: { req: NextRequest; action: string; context?: unknown } = {
+    req,
+    action: "Создание брони (админ)",
+  };
   try {
     const data = adminBookingSchema.parse(await req.json());
+    attempt.context = {
+      objectId: data.objectId,
+      guestName: data.guestName,
+      guestPhone: data.guestPhone,
+      guestsCount: data.guestsCount,
+    };
     const booking = await createBooking({
       objectId: data.objectId,
       checkInDate: data.checkInDate,
@@ -60,32 +74,60 @@ export async function POST(req: NextRequest) {
         data: { status, paidAt },
       });
     }
+    await recordAudit({
+      actor: actorFromSession(session),
+      action: "CREATE",
+      entity: "BOOKING",
+      entityId: booking.id,
+      summary: `Создал бронь ${booking.publicCode} (${data.guestName})`,
+      meta: {
+        objectId: data.objectId,
+        guestsCount: data.guestsCount,
+        paymentState: data.paymentState,
+      },
+      ip: getClientIp(req.headers),
+    });
     return ok({ id: booking.id, publicCode: booking.publicCode }, 201);
   } catch (e) {
-    return handleError(e);
+    return handleError(e, attempt);
   }
 }
 
 // Массовое удаление по фильтру. Требует ?confirm=1 во избежание случайного запроса.
 export async function DELETE(req: NextRequest) {
-  if (!(await requireAdmin())) return unauth();
+  const session = await requireAdmin();
+  if (!session) return unauth();
   try {
     const url = new URL(req.url);
     if (url.searchParams.get("confirm") !== "1") {
       return ok({ error: "confirm=1 required" }, 400);
     }
-    const status = url.searchParams.get("status");
-    const objectId = url.searchParams.get("objectId");
-    const categoryId = url.searchParams.get("cat");
-
-    const where: Prisma.BookingWhereInput = {};
-    if (status) where.status = status as Prisma.EnumBookingStatusFilter["equals"];
-    if (objectId) where.objectId = objectId;
-    if (categoryId) where.object = { objectType: { categoryId } };
+    // Те же фильтры, что и в списке броней — чтобы удалялось ровно показанное.
+    const where = buildBookingsWhere({
+      status: url.searchParams.get("status") ?? undefined,
+      q: url.searchParams.get("q") ?? undefined,
+      type: url.searchParams.get("type") ?? undefined,
+      obj: url.searchParams.get("obj") ?? undefined,
+      from: url.searchParams.get("from") ?? undefined,
+      to: url.searchParams.get("to") ?? undefined,
+      dateField: url.searchParams.get("dateField") ?? undefined,
+    });
 
     const result = await prisma.booking.deleteMany({ where });
+    await recordAudit({
+      actor: actorFromSession(session),
+      action: "DELETE",
+      entity: "BOOKING",
+      summary: `Массовое удаление броней по фильтру: ${result.count}`,
+      meta: { count: result.count, filters: Object.fromEntries(url.searchParams) },
+      ip: getClientIp(req.headers),
+    });
     return ok({ deleted: result.count });
   } catch (e) {
-    return handleError(e);
+    return handleError(e, {
+      req,
+      action: "Массовое удаление броней по фильтру",
+      context: Object.fromEntries(new URL(req.url).searchParams),
+    });
   }
 }

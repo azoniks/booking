@@ -11,11 +11,16 @@ import {
   BookingsBulkDelete,
 } from "@/components/admin/BookingsListRowActions";
 import { CollapsibleFilters } from "@/components/admin/CollapsibleFilters";
+import { BookingsFilters } from "@/components/admin/BookingsFilters";
 import {
   BookingsSortSelect,
   DEFAULT_BOOKINGS_SORT,
   type BookingsSort,
 } from "@/components/admin/BookingsSortSelect";
+import {
+  buildBookingsWhere,
+  countActiveBookingFilters,
+} from "@/lib/booking-filters";
 import type { Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -48,18 +53,23 @@ function bookingsOrderBy(
 export default async function BookingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; cat?: string; sort?: string }>;
+  searchParams: Promise<{
+    status?: string;
+    q?: string;
+    type?: string;
+    obj?: string;
+    from?: string;
+    to?: string;
+    dateField?: string;
+    sort?: string;
+  }>;
 }) {
-  const { status, cat, sort } = await searchParams;
+  const { status, q, type, obj, from, to, dateField, sort } = await searchParams;
+  const filters = { status, q, type, obj, from, to, dateField };
   const activeSort = (sort as BookingsSort) || DEFAULT_BOOKINGS_SORT;
-  const [items, objects, categories] = await Promise.all([
+  const [items, objects] = await Promise.all([
     prisma.booking.findMany({
-      where: {
-        ...(status ? { status: status as never } : {}),
-        ...(cat
-          ? { object: { objectType: { categoryId: cat } } }
-          : {}),
-      },
+      where: buildBookingsWhere(filters),
       orderBy: bookingsOrderBy(activeSort),
       take: 100,
       include: {
@@ -82,10 +92,27 @@ export default async function BookingsPage({
         addons: { where: { status: "ACTIVE" }, select: { id: true, name: true } },
       },
     }),
-    prisma.category.findMany({
-      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-    }),
   ]);
+
+  // Списки для селекторов фильтра выводим из активных объектов (без доп. запроса):
+  // типы дедуплицируем по id, объекты несут typeId для каскадной фильтрации.
+  const filterObjects = objects.map((o) => ({
+    id: o.id,
+    name: o.name,
+    typeId: o.objectType.id,
+  }));
+  const filterTypes = Array.from(
+    new Map(
+      objects.map((o) => [
+        o.objectType.id,
+        {
+          id: o.objectType.id,
+          name: o.objectType.name,
+          categoryName: o.objectType.category.name,
+        },
+      ]),
+    ).values(),
+  ).sort((a, b) => a.name.localeCompare(b.name, "ru"));
 
   const formObjects = objects.map((o) => ({
     id: o.id,
@@ -107,25 +134,6 @@ export default async function BookingsPage({
     })),
     addons: o.addons.map((a) => ({ id: a.id, name: a.name })),
   }));
-
-  const statusTabs = [
-    { value: "", label: "Все" },
-    { value: "PENDING", label: "Ожидают" },
-    { value: "PREPAID", label: "Аванс внесён" },
-    { value: "PAID", label: "Оплачены" },
-    { value: "CANCELLED", label: "Отменены" },
-    { value: "COMPLETED", label: "Завершены" },
-  ];
-
-  const buildHref = (next: { status?: string; cat?: string }) => {
-    const params = new URLSearchParams();
-    if (next.status) params.set("status", next.status);
-    if (next.cat) params.set("cat", next.cat);
-    // Сортировку сохраняем при переходах по фильтрам.
-    if (sort) params.set("sort", sort);
-    const qs = params.toString();
-    return qs ? `/admin/bookings?${qs}` : "/admin/bookings";
-  };
 
   // Группируем брони: входящие в один заказ — в общий блок, остальные — по одной.
   // Порядок блоков сохраняет исходную сортировку (по дате создания, desc).
@@ -155,11 +163,7 @@ export default async function BookingsPage({
         <h1 className="text-2xl font-bold">Брони</h1>
         <div className="flex items-center gap-2">
           <BookingsSortSelect value={activeSort} />
-          <BookingsBulkDelete
-            status={status}
-            cat={cat}
-            visibleCount={items.length}
-          />
+          <BookingsBulkDelete filters={filters} visibleCount={items.length} />
           <Link
             href="/admin/bookings/new-group"
             aria-label="Групповой заказ"
@@ -172,50 +176,12 @@ export default async function BookingsPage({
         </div>
       </div>
 
-      <CollapsibleFilters activeCount={(status ? 1 : 0) + (cat ? 1 : 0)}>
-        <div className="flex gap-2 flex-wrap">
-          {statusTabs.map((t) => (
-            <Link
-              key={t.value || "all"}
-              href={buildHref({ status: t.value || undefined, cat })}
-              className={`px-3 py-1.5 rounded-md text-sm ${
-                (status || "") === t.value
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
-              }`}
-            >
-              {t.label}
-            </Link>
-          ))}
-        </div>
-
-        {categories.length > 0 && (
-          <div className="flex gap-2 flex-wrap">
-            <Link
-              href={buildHref({ status, cat: undefined })}
-              className={`px-3 py-1.5 rounded-md text-sm border ${
-                !cat
-                  ? "bg-primary/10 text-primary border-primary"
-                  : "bg-background text-muted-foreground hover:bg-slate-50 border-input"
-              }`}
-            >
-              Все категории
-            </Link>
-            {categories.map((c) => (
-              <Link
-                key={c.id}
-                href={buildHref({ status, cat: c.id })}
-                className={`px-3 py-1.5 rounded-md text-sm border ${
-                  cat === c.id
-                    ? "bg-primary/10 text-primary border-primary"
-                    : "bg-background text-muted-foreground hover:bg-slate-50 border-input"
-                }`}
-              >
-                {c.name}
-              </Link>
-            ))}
-          </div>
-        )}
+      <CollapsibleFilters activeCount={countActiveBookingFilters(filters)}>
+        <BookingsFilters
+          types={filterTypes}
+          objects={filterObjects}
+          current={filters}
+        />
       </CollapsibleFilters>
 
       <div className="grid gap-2">

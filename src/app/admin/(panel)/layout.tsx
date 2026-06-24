@@ -7,6 +7,7 @@ import { ExternalLink } from "lucide-react";
 import { AdminMobileNav } from "@/components/admin/AdminMobileNav";
 import { AdminNav } from "@/components/admin/AdminNav";
 import { InstallAppHint } from "@/components/client/InstallAppHint";
+import { recordAudit, actorFromSession } from "@/lib/audit";
 
 // Переопределяем манифест на админский, чтобы установка PWA из панели
 // давала ярлык на /admin, а не на клиентскую часть (корневой layout).
@@ -40,6 +41,14 @@ export default async function AdminPanelLayout({ children }: { children: React.R
 
   async function signOutAction() {
     "use server";
+    const actor = actorFromSession(session);
+    await recordAudit({
+      actor,
+      action: "LOGOUT",
+      entity: "AUTH",
+      entityId: actor.id,
+      summary: `Выход из админки: ${actor.name ?? actor.email ?? "—"}`,
+    });
     await signOut({ redirectTo: "/admin/login" });
   }
 

@@ -3,6 +3,8 @@ import { prisma } from "@/lib/db";
 import { ok, fail, handleError, requireAdmin, unauth } from "@/lib/api-utils";
 import { categoryUpdateSchema } from "@/lib/validators";
 import { formatLocal, formatLocalTime } from "@/lib/time";
+import { recordAudit, actorFromSession } from "@/lib/audit";
+import { getClientIp } from "@/lib/rate-limit";
 
 type BookingMode = "DAILY" | "HOURLY" | "FULL_DAY";
 
@@ -45,7 +47,8 @@ function bookingConformsToMode(
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  if (!(await requireAdmin())) return unauth();
+  const session = await requireAdmin();
+  if (!session) return unauth();
   try {
     const { id } = await params;
     const raw = await req.json();
@@ -100,21 +103,44 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
 
     const updated = await prisma.category.update({ where: { id }, data: body });
+    await recordAudit({
+      actor: actorFromSession(session),
+      action: "UPDATE",
+      entity: "CATEGORY",
+      entityId: id,
+      summary: `Изменил категорию «${updated.name}»${
+        modeChanging ? ` (режим: ${current.bookingMode} → ${newMode})` : ""
+      }`,
+      ip: getClientIp(req.headers),
+    });
     return ok(updated);
   } catch (e) {
-    return handleError(e);
+    return handleError(e, { req, action: "Изменение категории" });
   }
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  if (!(await requireAdmin())) return unauth();
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const session = await requireAdmin();
+  if (!session) return unauth();
   try {
     const { id } = await params;
     const types = await prisma.objectType.count({ where: { categoryId: id } });
     if (types > 0) return fail("Сначала удалите типы объектов в этой категории", 400);
+    const existing = await prisma.category.findUnique({
+      where: { id },
+      select: { name: true },
+    });
     await prisma.category.delete({ where: { id } });
+    await recordAudit({
+      actor: actorFromSession(session),
+      action: "DELETE",
+      entity: "CATEGORY",
+      entityId: id,
+      summary: `Удалил категорию «${existing?.name ?? id}»`,
+      ip: getClientIp(req.headers),
+    });
     return ok({ id });
   } catch (e) {
-    return handleError(e);
+    return handleError(e, { req, action: "Удаление категории" });
   }
 }

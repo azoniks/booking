@@ -11,3 +11,12 @@ export function normalizePhone(raw: string): string {
   if (digits.length === 10) return `+7${digits}`;
   return `+${digits}`;
 }
+
+/**
+ * Проверяет, что телефон указан полностью: российский номер вида
+ * +7XXXXXXXXXX (код страны 7 + 10 цифр). Принимает любой ввод, который
+ * normalizePhone сводит к этому канону (с 8, +7, маской и т.п.).
+ */
+export function isCompleteRuPhone(raw: string): boolean {
+  return /^\+7\d{10}$/.test(normalizePhone(raw));
+}
