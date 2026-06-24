@@ -524,6 +524,41 @@ export async function resolvePrepayment(
   return { prepaymentAmount, paymentPercent: percent, paymentType: "PERCENT" };
 }
 
+// Окно «скоро отменится»: PENDING, до конца срока осталось ≤ REMINDER_BEFORE
+// минут, но срок ещё не истёк. Группы и одиночные брони ищем раздельно
+// (у заказа уведомление одно на всю группу).
+function expiryReminderWindow(now: Date) {
+  const remindAt = new Date(
+    now.getTime() -
+      (env.PAYMENT_TIMEOUT_MINUTES - env.PAYMENT_REMINDER_BEFORE_MINUTES) * 60_000,
+  );
+  const expireAt = new Date(now.getTime() - env.PAYMENT_TIMEOUT_MINUTES * 60_000);
+  return { remindAt, expireAt };
+}
+
+export async function findExpiringPendingBookings(now: Date = new Date()) {
+  const { remindAt, expireAt } = expiryReminderWindow(now);
+  return prisma.booking.findMany({
+    where: {
+      status: "PENDING",
+      groupId: null, // групповые брони напоминаем на уровне заказа
+      createdAt: { lte: remindAt, gt: expireAt },
+    },
+    select: { id: true },
+  });
+}
+
+export async function findExpiringPendingGroups(now: Date = new Date()) {
+  const { remindAt, expireAt } = expiryReminderWindow(now);
+  return prisma.bookingGroup.findMany({
+    where: {
+      status: "PENDING",
+      createdAt: { lte: remindAt, gt: expireAt },
+    },
+    select: { id: true },
+  });
+}
+
 /**
  * Отмена просроченных PENDING-броней.
  */

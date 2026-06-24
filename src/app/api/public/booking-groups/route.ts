@@ -4,7 +4,10 @@ import { ok, handleError } from "@/lib/api-utils";
 import { publicBookingGroupSchema } from "@/lib/validators";
 import { createBookingGroup } from "@/lib/booking-service";
 import { initGroupPayment } from "@/lib/tinkoff";
-import { sendNewBookingGroupNotifications } from "@/lib/notifications/email";
+import {
+  sendNewBookingGroupNotifications,
+  sendPaymentLinkGroupEmail,
+} from "@/lib/notifications/email";
 import {
   checkBookingRateLimit,
   getBookingRateLimitConfig,
@@ -131,6 +134,10 @@ export async function POST(req: NextRequest) {
 
     sendNewBookingGroupNotifications(group.id).catch((e) =>
       console.error(`[booking-group ${reqId}] notify failed:`, e),
+    );
+    // Клиенту — письмо со ссылкой на оплату заказа.
+    sendPaymentLinkGroupEmail(group.id).catch((e) =>
+      console.error(`[booking-group ${reqId}] pay-link email failed:`, e),
     );
 
     return ok({

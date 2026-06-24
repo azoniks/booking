@@ -3,7 +3,10 @@ import { ok, handleError, fail } from "@/lib/api-utils";
 import { publicBookingSchema } from "@/lib/validators";
 import { createBooking } from "@/lib/booking-service";
 import { initPayment } from "@/lib/tinkoff";
-import { sendNewBookingNotifications } from "@/lib/notifications/email";
+import {
+  sendNewBookingNotifications,
+  sendPaymentLinkEmail,
+} from "@/lib/notifications/email";
 import { prisma } from "@/lib/db";
 import {
   checkBookingRateLimit,
@@ -128,6 +131,11 @@ export async function POST(req: NextRequest) {
 
     sendNewBookingNotifications(booking.id).catch((e) =>
       console.error(`[booking ${reqId}] notify failed:`, e),
+    );
+    // Клиенту — письмо со ссылкой на оплату (чтобы вернуться к оплате, даже
+    // если закрыл вкладку).
+    sendPaymentLinkEmail(booking.id).catch((e) =>
+      console.error(`[booking ${reqId}] pay-link email failed:`, e),
     );
 
     return ok({

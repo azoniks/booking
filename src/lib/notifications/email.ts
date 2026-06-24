@@ -7,6 +7,12 @@ import { sendMax } from "./max";
 import { sendToGuestAll, guestHasSubscription } from "./guest-messenger";
 
 const PAYMENT_RETRY_KIND = "payment_retry";
+// Письмо клиенту со ссылкой на оплату при создании брони/заказа и напоминание
+// перед авто-отменой (kind-и разные, чтобы каждое ушло один раз).
+const PAYMENT_LINK_KIND = "guest_payment_link";
+const PAYMENT_LINK_GROUP_KIND = "guest_payment_link_group";
+const PAYMENT_REMINDER_KIND = "payment_expiry_reminder";
+const PAYMENT_REMINDER_GROUP_KIND = "payment_expiry_reminder_group";
 
 export interface EmailConfig {
   enabled: boolean;
@@ -486,6 +492,113 @@ export async function sendPaymentRetryEmail(bookingId: string) {
     text,
     bookingId,
     kind: PAYMENT_RETRY_KIND,
+  });
+}
+
+/**
+ * Письмо клиенту со ссылкой на оплату одиночной брони. reminder=false — при
+ * создании (чтобы клиент мог вернуться к оплате, даже закрыв вкладку);
+ * reminder=true — напоминание перед авто-отменой. Шлётся один раз (по kind),
+ * только для PENDING-броней с указанным email.
+ */
+export async function sendPaymentLinkEmail(
+  bookingId: string,
+  opts: { reminder?: boolean } = {},
+) {
+  const b = await prisma.booking.findUnique({
+    where: { id: bookingId },
+    include: { object: true },
+  });
+  if (!b || b.status !== "PENDING" || !b.guestEmail) return;
+
+  const kind = opts.reminder ? PAYMENT_REMINDER_KIND : PAYMENT_LINK_KIND;
+  const already = await prisma.notificationLog.count({
+    where: { bookingId, kind, status: "sent" },
+  });
+  if (already > 0) return;
+
+  const payUrl = `${env.APP_URL}/booking/retry?code=${b.publicCode}`;
+  const elapsedMin = (Date.now() - b.createdAt.getTime()) / 60_000;
+  const remainingMin = Math.max(0, Math.ceil(env.PAYMENT_TIMEOUT_MINUTES - elapsedMin));
+  const head = opts.reminder
+    ? `Бронь ${b.publicCode} ещё не оплачена и скоро будет автоматически отменена.`
+    : `Бронь ${b.publicCode} создана. Чтобы подтвердить её, оплатите по ссылке ниже.`;
+
+  const text = [
+    `Здравствуйте, ${b.guestName}!`,
+    head,
+    ``,
+    `Объект: ${b.object.name}`,
+    `Время: ${formatLocal(b.startAt)} — ${formatLocal(b.endAt)}`,
+    `К оплате онлайн: ${b.prepaymentAmount} ₽`,
+    ``,
+    `Ссылка для оплаты:`,
+    payUrl,
+    ``,
+    remainingMin > 0
+      ? `Бронь будет автоматически отменена через ~${remainingMin} мин., если оплата не поступит.`
+      : `Срок оплаты истекает — оплатите как можно скорее.`,
+  ].join("\n");
+
+  await sendEmail({
+    to: b.guestEmail,
+    subject: opts.reminder
+      ? `Бронь ${b.publicCode}: оплатите, чтобы не потерять`
+      : `Оплата брони ${b.publicCode}`,
+    text,
+    bookingId,
+    kind,
+  });
+}
+
+/** То же, но для группового заказа (ссылка /booking/retry?group=...). */
+export async function sendPaymentLinkGroupEmail(
+  groupId: string,
+  opts: { reminder?: boolean } = {},
+) {
+  const g = await prisma.bookingGroup.findUnique({
+    where: { id: groupId },
+    include: { bookings: { select: { id: true } } },
+  });
+  if (!g || g.status !== "PENDING" || !g.guestEmail) return;
+  const firstBookingId = g.bookings[0]?.id;
+
+  const kind = opts.reminder ? PAYMENT_REMINDER_GROUP_KIND : PAYMENT_LINK_GROUP_KIND;
+  const already = await prisma.notificationLog.count({
+    where: { bookingId: firstBookingId, kind, status: "sent" },
+  });
+  if (already > 0) return;
+
+  const payUrl = `${env.APP_URL}/booking/retry?group=${g.publicCode}`;
+  const elapsedMin = (Date.now() - g.createdAt.getTime()) / 60_000;
+  const remainingMin = Math.max(0, Math.ceil(env.PAYMENT_TIMEOUT_MINUTES - elapsedMin));
+  const head = opts.reminder
+    ? `Заказ ${g.publicCode} ещё не оплачен и скоро будет автоматически отменён.`
+    : `Заказ ${g.publicCode} создан. Чтобы подтвердить его, оплатите по ссылке ниже.`;
+
+  const text = [
+    `Здравствуйте, ${g.guestName}!`,
+    head,
+    ``,
+    `Объектов в заказе: ${g.bookings.length}`,
+    `К оплате онлайн: ${g.prepaymentAmount} ₽`,
+    ``,
+    `Ссылка для оплаты:`,
+    payUrl,
+    ``,
+    remainingMin > 0
+      ? `Заказ будет автоматически отменён через ~${remainingMin} мин., если оплата не поступит.`
+      : `Срок оплаты истекает — оплатите как можно скорее.`,
+  ].join("\n");
+
+  await sendEmail({
+    to: g.guestEmail,
+    subject: opts.reminder
+      ? `Заказ ${g.publicCode}: оплатите, чтобы не потерять`
+      : `Оплата заказа ${g.publicCode}`,
+    text,
+    bookingId: firstBookingId,
+    kind,
   });
 }
 

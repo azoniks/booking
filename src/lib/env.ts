@@ -9,6 +9,8 @@ const schema = z.object({
   APP_URL: z.string().url().default("http://localhost:3000"),
   APP_TIMEZONE: z.string().default("Europe/Moscow"),
   PAYMENT_TIMEOUT_MINUTES: z.coerce.number().int().positive().default(15),
+  // За сколько минут до авто-отмены слать напоминание со ссылкой на оплату.
+  PAYMENT_REMINDER_BEFORE_MINUTES: z.coerce.number().int().positive().default(5),
 
   TINKOFF_TEST_MODE: z
     .string()

@@ -1,6 +1,14 @@
 import { prisma } from "./db";
-import { cancelExpiredBookings } from "./booking-service";
-import { sendReminder } from "./notifications/email";
+import {
+  cancelExpiredBookings,
+  findExpiringPendingBookings,
+  findExpiringPendingGroups,
+} from "./booking-service";
+import {
+  sendReminder,
+  sendPaymentLinkEmail,
+  sendPaymentLinkGroupEmail,
+} from "./notifications/email";
 import { recordServerError } from "./server-errors";
 
 function logSchedulerError(job: string, e: unknown) {
@@ -19,8 +27,23 @@ export function startScheduler() {
   if (started) return;
   started = true;
 
-  // Каждые 60 секунд — отмена просроченных PENDING-броней
+  // Каждые 60 секунд: сначала напоминаем об оплате тем, у кого срок почти вышел,
+  // затем отменяем уже просроченные PENDING-брони. Окна не пересекаются
+  // (напоминаем тех, кто ещё не истёк), порядок не критичен. Дедуп — внутри
+  // sendPaymentLink* по kind, поэтому письмо уходит один раз.
   setInterval(async () => {
+    try {
+      const [bks, grps] = await Promise.all([
+        findExpiringPendingBookings(),
+        findExpiringPendingGroups(),
+      ]);
+      await Promise.allSettled([
+        ...bks.map((b) => sendPaymentLinkEmail(b.id, { reminder: true })),
+        ...grps.map((g) => sendPaymentLinkGroupEmail(g.id, { reminder: true })),
+      ]);
+    } catch (e) {
+      logSchedulerError("expiry-reminder", e);
+    }
     try {
       const n = await cancelExpiredBookings();
       if (n > 0) console.log(`[scheduler] cancelled ${n} expired pending bookings`);
