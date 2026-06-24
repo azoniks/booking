@@ -2,11 +2,14 @@ import type { Prisma } from "@prisma/client";
 
 // Единый набор фильтров для списка броней и массового удаления — чтобы то,
 // что показано на странице, и то, что удаляет «удалить по фильтру», совпадало.
+// Категория — одиночная (каскадно сужает типы/объекты); типы и объекты —
+// множественные (в URL хранятся как CSV: type=id1,id2).
 export type BookingsFilterParams = {
   status?: string; // BookingStatus
   q?: string; // поиск: объект / гость / телефон / код брони
-  type?: string; // ObjectType.id
-  obj?: string; // BookingObject.id
+  cats?: string[]; // Category.id[]
+  types?: string[]; // ObjectType.id[]
+  objs?: string[]; // BookingObject.id[]
   from?: string; // YYYY-MM-DD
   to?: string; // YYYY-MM-DD
   dateField?: string; // "start" (по умолчанию) | "created"
@@ -15,6 +18,27 @@ export type BookingsFilterParams = {
 // По какому полю брони применять период.
 function rangeField(dateField?: string): "createdAt" | "startAt" {
   return dateField === "created" ? "createdAt" : "startAt";
+}
+
+// Парсит фильтры из произвольного источника параметров (searchParams страницы
+// или URLSearchParams роута). CSV-параметры type/obj разбираются в массивы.
+export function parseBookingsFilters(
+  get: (key: string) => string | null | undefined,
+): BookingsFilterParams {
+  const csv = (v: string | null | undefined) => {
+    const arr = (v ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+    return arr.length ? arr : undefined;
+  };
+  return {
+    status: get("status") || undefined,
+    q: get("q") || undefined,
+    cats: csv(get("cat")),
+    types: csv(get("type")),
+    objs: csv(get("obj")),
+    from: get("from") || undefined,
+    to: get("to") || undefined,
+    dateField: get("dateField") || undefined,
+  };
 }
 
 /**
@@ -29,8 +53,15 @@ export function buildBookingsWhere(
   if (p.status) {
     where.status = p.status as Prisma.EnumBookingStatusFilter["equals"];
   }
-  if (p.obj) where.objectId = p.obj;
-  if (p.type) where.object = { objectTypeId: p.type };
+  if (p.objs?.length) where.objectId = { in: p.objs };
+
+  // Категории и типы — через связь object.objectType.
+  const typeWhere: Prisma.ObjectTypeWhereInput = {};
+  if (p.cats?.length) typeWhere.categoryId = { in: p.cats };
+  if (p.types?.length) typeWhere.id = { in: p.types };
+  if (Object.keys(typeWhere).length > 0) {
+    where.object = { objectType: typeWhere };
+  }
 
   const q = p.q?.trim();
   if (q) {
@@ -57,8 +88,9 @@ export function countActiveBookingFilters(p: BookingsFilterParams): number {
   let n = 0;
   if (p.status) n++;
   if (p.q?.trim()) n++;
-  if (p.type) n++;
-  if (p.obj) n++;
+  if (p.cats?.length) n++;
+  if (p.types?.length) n++;
+  if (p.objs?.length) n++;
   if (p.from || p.to) n++;
   return n;
 }

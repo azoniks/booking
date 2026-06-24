@@ -4,7 +4,7 @@ import { ok, handleError, requireAdmin, unauth } from "@/lib/api-utils";
 import { Prisma } from "@prisma/client";
 import { adminBookingSchema, paymentStateToStatus } from "@/lib/validators";
 import { createBooking } from "@/lib/booking-service";
-import { buildBookingsWhere } from "@/lib/booking-filters";
+import { buildBookingsWhere, parseBookingsFilters } from "@/lib/booking-filters";
 import { recordAudit, actorFromSession } from "@/lib/audit";
 import { getClientIp } from "@/lib/rate-limit";
 
@@ -103,15 +103,9 @@ export async function DELETE(req: NextRequest) {
       return ok({ error: "confirm=1 required" }, 400);
     }
     // Те же фильтры, что и в списке броней — чтобы удалялось ровно показанное.
-    const where = buildBookingsWhere({
-      status: url.searchParams.get("status") ?? undefined,
-      q: url.searchParams.get("q") ?? undefined,
-      type: url.searchParams.get("type") ?? undefined,
-      obj: url.searchParams.get("obj") ?? undefined,
-      from: url.searchParams.get("from") ?? undefined,
-      to: url.searchParams.get("to") ?? undefined,
-      dateField: url.searchParams.get("dateField") ?? undefined,
-    });
+    const where = buildBookingsWhere(
+      parseBookingsFilters((k) => url.searchParams.get(k)),
+    );
 
     const result = await prisma.booking.deleteMany({ where });
     await recordAudit({

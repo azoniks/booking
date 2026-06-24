@@ -20,6 +20,7 @@ import {
 import {
   buildBookingsWhere,
   countActiveBookingFilters,
+  parseBookingsFilters,
 } from "@/lib/booking-filters";
 import type { Prisma } from "@prisma/client";
 
@@ -56,6 +57,7 @@ export default async function BookingsPage({
   searchParams: Promise<{
     status?: string;
     q?: string;
+    cat?: string;
     type?: string;
     obj?: string;
     from?: string;
@@ -64,9 +66,21 @@ export default async function BookingsPage({
     sort?: string;
   }>;
 }) {
-  const { status, q, type, obj, from, to, dateField, sort } = await searchParams;
-  const filters = { status, q, type, obj, from, to, dateField };
-  const activeSort = (sort as BookingsSort) || DEFAULT_BOOKINGS_SORT;
+  const sp = await searchParams;
+  // type/obj приходят как CSV (множественный выбор) — разбираем в массивы.
+  const filters = parseBookingsFilters((k) => (sp as Record<string, string | undefined>)[k]);
+  // Сырые строки параметров — для «удалить по фильтру» (тот же формат URL).
+  const rawFilters = {
+    status: sp.status,
+    q: sp.q,
+    cat: sp.cat,
+    type: sp.type,
+    obj: sp.obj,
+    from: sp.from,
+    to: sp.to,
+    dateField: sp.dateField,
+  };
+  const activeSort = (sp.sort as BookingsSort) || DEFAULT_BOOKINGS_SORT;
   const [items, objects] = await Promise.all([
     prisma.booking.findMany({
       where: buildBookingsWhere(filters),
@@ -95,11 +109,13 @@ export default async function BookingsPage({
   ]);
 
   // Списки для селекторов фильтра выводим из активных объектов (без доп. запроса):
-  // типы дедуплицируем по id, объекты несут typeId для каскадной фильтрации.
+  // категории/типы дедуплицируем по id; объекты несут typeId и categoryId для
+  // каскадной фильтрации (категория → типы → объекты).
   const filterObjects = objects.map((o) => ({
     id: o.id,
     name: o.name,
     typeId: o.objectType.id,
+    categoryId: o.objectType.category.id,
   }));
   const filterTypes = Array.from(
     new Map(
@@ -109,8 +125,17 @@ export default async function BookingsPage({
           id: o.objectType.id,
           name: o.objectType.name,
           categoryName: o.objectType.category.name,
+          categoryId: o.objectType.category.id,
         },
       ]),
+    ).values(),
+  ).sort((a, b) => a.name.localeCompare(b.name, "ru"));
+  const filterCategories = Array.from(
+    new Map(
+      objects.map((o) => [o.objectType.category.id, {
+        id: o.objectType.category.id,
+        name: o.objectType.category.name,
+      }]),
     ).values(),
   ).sort((a, b) => a.name.localeCompare(b.name, "ru"));
 
@@ -163,7 +188,7 @@ export default async function BookingsPage({
         <h1 className="text-2xl font-bold">Брони</h1>
         <div className="flex items-center gap-2">
           <BookingsSortSelect value={activeSort} />
-          <BookingsBulkDelete filters={filters} visibleCount={items.length} />
+          <BookingsBulkDelete filters={rawFilters} visibleCount={items.length} />
           <Link
             href="/admin/bookings/new-group"
             aria-label="Групповой заказ"
@@ -178,6 +203,7 @@ export default async function BookingsPage({
 
       <CollapsibleFilters activeCount={countActiveBookingFilters(filters)}>
         <BookingsFilters
+          categories={filterCategories}
           types={filterTypes}
           objects={filterObjects}
           current={filters}

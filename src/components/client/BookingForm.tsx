@@ -834,13 +834,15 @@ export function BookingForm({
               }}
               required
             />
-            <p className="text-xs text-muted-foreground mt-1">
-              {isSectional && object.sections
-                ? `до ${object.sections.total * object.sections.capacity} гостей (${object.sections.capacity} на секцию)`
-                : isFullDay
+            {/* Для секционных площадок подсказку не показываем — логика брони
+                подробно описана в описании объекта. */}
+            {!isSectional && (
+              <p className="text-xs text-muted-foreground mt-1">
+                {isFullDay
                   ? `до ${object.maxCapacity} гостей включено`
                   : `${object.baseCapacity} включено · доплата за допместо ${object.extraGuestPrice} ₽`}
-            </p>
+              </p>
+            )}
           </div>
 
           <div className="space-y-2 pt-2 border-t">

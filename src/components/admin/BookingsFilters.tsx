@@ -6,12 +6,14 @@ import { Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { MultiSelect } from "@/components/ui/multi-select";
 import { cn } from "@/lib/utils";
 
 const PATH = "/admin/bookings";
 
-type TypeOption = { id: string; name: string; categoryName: string };
-type ObjectOption = { id: string; name: string; typeId: string };
+type CategoryOption = { id: string; name: string };
+type TypeOption = { id: string; name: string; categoryName: string; categoryId: string };
+type ObjectOption = { id: string; name: string; typeId: string; categoryId: string };
 
 const STATUS_SEGMENTS: { value: string; label: string }[] = [
   { value: "", label: "Все" },
@@ -27,8 +29,8 @@ const DATE_FIELD_SEGMENTS: { value: string; label: string }[] = [
   { value: "created", label: "Дата создания" },
 ];
 
-// Ключи фильтров, которые сбрасываются «Сбросить всё» (sort сохраняется).
-const FILTER_KEYS = ["q", "type", "obj", "from", "to", "dateField", "status"] as const;
+// Ключи, которые сбрасываются «Сбросить всё» (sort сохраняется).
+const RESET_KEYS = ["q", "cat", "type", "obj", "from", "to", "dateField", "status"];
 
 function ymd(d: Date): string {
   const y = d.getFullYear();
@@ -38,17 +40,20 @@ function ymd(d: Date): string {
 }
 
 export function BookingsFilters({
+  categories,
   types,
   objects,
   current,
 }: {
+  categories: CategoryOption[];
   types: TypeOption[];
   objects: ObjectOption[];
   current: {
     status?: string;
     q?: string;
-    type?: string;
-    obj?: string;
+    cats?: string[];
+    types?: string[];
+    objs?: string[];
     from?: string;
     to?: string;
     dateField?: string;
@@ -58,10 +63,12 @@ export function BookingsFilters({
   const params = useSearchParams();
 
   const dateField = current.dateField === "created" ? "created" : "start";
+  const selectedCats = useMemo(() => current.cats ?? [], [current.cats]);
+  const selectedTypes = useMemo(() => current.types ?? [], [current.types]);
+  const selectedObjs = useMemo(() => current.objs ?? [], [current.objs]);
 
   // Поиск — локальный стейт с дебаунсом, чтобы не дёргать навигацию на каждый символ.
   const [search, setSearch] = useState(current.q ?? "");
-  // Синхронизируем поле при внешней смене URL (напр. «Сбросить всё»).
   useEffect(() => {
     setSearch(current.q ?? "");
   }, [current.q]);
@@ -78,7 +85,7 @@ export function BookingsFilters({
     router.push(qs ? `${PATH}?${qs}` : PATH);
   }
 
-  // Дебаунс поиска: пушим q через 400мс после остановки ввода.
+  // Дебаунс поиска.
   const firstRender = useRef(true);
   useEffect(() => {
     if (firstRender.current) {
@@ -92,15 +99,69 @@ export function BookingsFilters({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
-  // Объекты, доступные для выбора: при выбранном типе — только его объекты.
-  const objectsForType = useMemo(
-    () => (current.type ? objects.filter((o) => o.typeId === current.type) : objects),
-    [objects, current.type],
+  // Каскад: типы сужаются категориями, объекты — категориями и выбранными типами.
+  const typesForCategory = useMemo(
+    () =>
+      selectedCats.length
+        ? types.filter((t) => selectedCats.includes(t.categoryId))
+        : types,
+    [types, selectedCats],
+  );
+  const objectsForSelection = useMemo(
+    () =>
+      objects.filter(
+        (o) =>
+          (selectedCats.length === 0 || selectedCats.includes(o.categoryId)) &&
+          (selectedTypes.length === 0 || selectedTypes.includes(o.typeId)),
+      ),
+    [objects, selectedCats, selectedTypes],
   );
 
-  const activeCount = FILTER_KEYS.filter(
-    (k) => k !== "dateField" && (current as Record<string, string | undefined>)[k],
-  ).length;
+  // Смена категорий: подрезаем выбранные типы и объекты, которые больше не
+  // принадлежат выбранным категориям.
+  function onCatsChange(nextCats: string[]) {
+    const validTypes = selectedTypes.filter((id) => {
+      const t = types.find((x) => x.id === id);
+      return t && (nextCats.length === 0 || nextCats.includes(t.categoryId));
+    });
+    const validObjs = selectedObjs.filter((id) => {
+      const o = objects.find((x) => x.id === id);
+      if (!o) return false;
+      if (nextCats.length > 0 && !nextCats.includes(o.categoryId)) return false;
+      if (validTypes.length > 0 && !validTypes.includes(o.typeId)) return false;
+      return true;
+    });
+    setParams({
+      cat: nextCats.length ? nextCats.join(",") : undefined,
+      type: validTypes.length ? validTypes.join(",") : undefined,
+      obj: validObjs.length ? validObjs.join(",") : undefined,
+    });
+  }
+
+  // Смена типов: подрезаем выбранные объекты, которые больше не входят в выбор.
+  function onTypesChange(nextTypes: string[]) {
+    const validObjs = selectedObjs.filter((id) => {
+      const o = objects.find((x) => x.id === id);
+      if (!o) return false;
+      if (selectedCats.length > 0 && !selectedCats.includes(o.categoryId)) return false;
+      if (nextTypes.length > 0 && !nextTypes.includes(o.typeId)) return false;
+      return true;
+    });
+    setParams({
+      type: nextTypes.length ? nextTypes.join(",") : undefined,
+      obj: validObjs.length ? validObjs.join(",") : undefined,
+    });
+  }
+
+  function onObjsChange(nextObjs: string[]) {
+    setParams({ obj: nextObjs.length ? nextObjs.join(",") : undefined });
+  }
+
+  const activeCount =
+    [current.status, current.q, current.from, current.to].filter(Boolean).length +
+    (selectedCats.length ? 1 : 0) +
+    (selectedTypes.length ? 1 : 0) +
+    (selectedObjs.length ? 1 : 0);
 
   function applyPreset(from: string, to: string) {
     setParams({ from, to });
@@ -116,9 +177,7 @@ export function BookingsFilters({
             variant="ghost"
             size="sm"
             className="h-7 px-2 text-xs text-muted-foreground"
-            onClick={() =>
-              setParams(Object.fromEntries(FILTER_KEYS.map((k) => [k, undefined])))
-            }
+            onClick={() => setParams(Object.fromEntries(RESET_KEYS.map((k) => [k, undefined])))}
           >
             <X className="w-3.5 h-3.5 mr-1" />
             Сбросить всё
@@ -204,40 +263,40 @@ export function BookingsFilters({
         </div>
       </div>
 
-      {/* Тип объекта → Объект */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      {/* Категория → Типы → Объекты (множественный выбор) */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div>
-          <Label className="text-xs">Тип объекта</Label>
-          <select
-            value={current.type ?? ""}
-            onChange={(e) =>
-              // Смена типа сбрасывает выбранный объект.
-              setParams({ type: e.target.value || undefined, obj: undefined })
-            }
-            className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <option value="">Все типы</option>
-            {types.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name} · {t.categoryName}
-              </option>
-            ))}
-          </select>
+          <Label className="text-xs">Категории</Label>
+          <MultiSelect
+            placeholder="Все категории"
+            options={categories.map((c) => ({ value: c.id, label: c.name }))}
+            selected={selectedCats}
+            onChange={onCatsChange}
+            searchable={categories.length > 8}
+          />
         </div>
         <div>
-          <Label className="text-xs">Объект</Label>
-          <select
-            value={current.obj ?? ""}
-            onChange={(e) => setParams({ obj: e.target.value || undefined })}
-            className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <option value="">Все объекты</option>
-            {objectsForType.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.name}
-              </option>
-            ))}
-          </select>
+          <Label className="text-xs">Типы объектов</Label>
+          <MultiSelect
+            placeholder="Все типы"
+            options={typesForCategory.map((t) => ({
+              value: t.id,
+              label: selectedCats.length === 1 ? t.name : `${t.name} · ${t.categoryName}`,
+            }))}
+            selected={selectedTypes}
+            onChange={onTypesChange}
+            searchable={typesForCategory.length > 8}
+          />
+        </div>
+        <div>
+          <Label className="text-xs">Объекты</Label>
+          <MultiSelect
+            placeholder="Все объекты"
+            options={objectsForSelection.map((o) => ({ value: o.id, label: o.name }))}
+            selected={selectedObjs}
+            onChange={onObjsChange}
+            searchable
+          />
         </div>
       </div>
 

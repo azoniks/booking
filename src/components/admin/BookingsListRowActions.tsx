@@ -58,8 +58,9 @@ export function BookingRowDelete({
 export type BookingsBulkFilters = {
   status?: string;
   q?: string;
-  type?: string;
-  obj?: string;
+  cat?: string;
+  type?: string; // CSV id'шников типов
+  obj?: string; // CSV id'шников объектов
   from?: string;
   to?: string;
   dateField?: string;
