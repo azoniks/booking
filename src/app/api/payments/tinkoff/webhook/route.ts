@@ -1,6 +1,9 @@
 import { NextRequest } from "next/server";
 import { verifyTinkoffWebhook, applyPaymentResult } from "@/lib/tinkoff";
-import { sendPaidGroupNotifications } from "@/lib/notifications/email";
+import {
+  sendPaidNotifications,
+  sendPaidGroupNotifications,
+} from "@/lib/notifications/email";
 
 export async function POST(req: NextRequest) {
   try {
@@ -13,9 +16,15 @@ export async function POST(req: NextRequest) {
     const succeeded = status === "CONFIRMED" || status === "AUTHORIZED";
     if (externalId) {
       const res = await applyPaymentResult({ externalId, succeeded, rawPayload: payload });
-      // Групповой заказ оплачен — рассылаем агрегированное уведомление.
-      if (res?.succeeded && res.groupId) {
-        sendPaidGroupNotifications(res.groupId).catch((e) => console.error("[notify group]", e));
+      // Оплата прошла — рассылаем уведомления (клиенту + админам).
+      if (res?.succeeded) {
+        if (res.groupId) {
+          // Групповой заказ — агрегированное уведомление.
+          sendPaidGroupNotifications(res.groupId).catch((e) => console.error("[notify group]", e));
+        } else if (res.bookingId) {
+          // Одиночная бронь — как в mock-обработчике.
+          sendPaidNotifications(res.bookingId).catch((e) => console.error("[notify]", e));
+        }
       }
     }
     return new Response("OK");

@@ -158,6 +158,32 @@ async function getAdminEmails(): Promise<string[]> {
   return [];
 }
 
+// Человеческий статус оплаты для уведомлений с учётом модели предоплаты
+// (аванс онлайн + остаток на месте). split = бронь оплачивается частями.
+function paymentStatusLine(status: string, prepay: number, remaining: number): string {
+  const split = prepay > 0 && remaining > 0;
+  switch (status) {
+    case "PENDING":
+      return split
+        ? "ожидает предоплаты (аванс онлайн, остаток на месте)"
+        : "ожидает оплаты";
+    case "PREPAID":
+      return split
+        ? `аванс внесён, остаток ${remaining.toFixed(2)} ₽ — на месте`
+        : "оплачено";
+    case "PAID":
+      return "оплачено полностью";
+    case "CANCELLED":
+      return "отменена";
+    case "COMPLETED":
+      return "завершена";
+    case "NO_SHOW":
+      return "гость не пришёл";
+    default:
+      return status;
+  }
+}
+
 export async function sendNewBookingNotifications(bookingId: string) {
   const b = await prisma.booking.findUnique({
     where: { id: bookingId },
@@ -189,7 +215,7 @@ export async function sendNewBookingNotifications(bookingId: string) {
     `Гостей: ${b.guestsCount}`,
     `${formatLocal(b.startAt)} → ${formatLocal(b.endAt)}`,
     ...priceLines,
-    `Статус: ${b.status} (ожидает оплаты)`,
+    `Статус: ${paymentStatusLine(b.status, prepay, remaining)}`,
   ].join("\n");
 
   await Promise.allSettled([
@@ -260,7 +286,11 @@ export async function sendPaidNotifications(bookingId: string) {
   const guestText = guestLines.join("\n");
 
   const admins = await getAdminEmails();
-  const adminText = `Бронь ${b.publicCode} оплачена. ${b.guestName}, ${b.object.name}, ${formatLocal(b.startAt)}.`;
+  const adminPaidLine =
+    remaining > 0 && Number(b.prepaymentAmount) > 0
+      ? `аванс ${b.prepaymentAmount} ₽ внесён, остаток ${remaining.toFixed(2)} ₽ — на месте`
+      : "оплачена полностью";
+  const adminText = `Бронь ${b.publicCode}: ${adminPaidLine}. ${b.guestName}, ${b.object.name}, ${formatLocal(b.startAt)}.`;
 
   await Promise.allSettled([
     sendEmail({
@@ -338,7 +368,7 @@ export async function sendNewBookingGroupNotifications(groupId: string) {
     ...groupItemLines(g.bookings),
     ``,
     ...priceLines,
-    `Статус: ${g.status} (ожидает оплаты)`,
+    `Статус: ${paymentStatusLine(g.status, prepay, remaining)}`,
   ].join("\n");
 
   const admins = await getAdminEmails();
