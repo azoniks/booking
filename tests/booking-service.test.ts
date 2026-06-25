@@ -624,8 +624,8 @@ describe("cancelExpiredBookings", () => {
       where: { id: b.id },
       data: { createdAt: new Date(Date.now() - 20 * 60_000) },
     });
-    const count = await cancelExpiredBookings();
-    expect(count).toBe(1);
+    const cancelled = await cancelExpiredBookings();
+    expect(cancelled).toHaveLength(1);
     const after = await testDb.booking.findUnique({ where: { id: b.id } });
     expect(after?.status).toBe("CANCELLED");
   });
@@ -639,7 +639,29 @@ describe("cancelExpiredBookings", () => {
       guestsCount: 4,
       ...guest,
     });
-    const count = await cancelExpiredBookings();
-    expect(count).toBe(0);
+    const cancelled = await cancelExpiredBookings();
+    expect(cancelled).toHaveLength(0);
+  });
+
+  it("не отменяет ручные (admin) брони, даже просроченные", async () => {
+    const obj = await seedHourlyObject({ cleaningMinutes: 0 });
+    const b = await createBooking(
+      {
+        objectId: obj.id,
+        startAt: "2026-07-07T10:00:00Z",
+        endAt: "2026-07-07T12:00:00Z",
+        guestsCount: 4,
+        ...guest,
+      },
+      { createdByAdmin: true },
+    );
+    await testDb.booking.update({
+      where: { id: b.id },
+      data: { createdAt: new Date(Date.now() - 20 * 60_000) },
+    });
+    const cancelled = await cancelExpiredBookings();
+    expect(cancelled).toHaveLength(0);
+    const after = await testDb.booking.findUnique({ where: { id: b.id } });
+    expect(after?.status).toBe("PENDING");
   });
 });

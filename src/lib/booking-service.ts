@@ -282,8 +282,10 @@ function buildBookingCreateData(
   p: PreparedBooking,
   guest: GuestInfo,
   groupId?: string,
+  createdByAdmin = false,
 ): Prisma.BookingUncheckedCreateInput {
   return {
+    createdByAdmin,
     publicCode: generatePublicCode(),
     objectId: p.obj.id,
     guestName: guest.guestName.trim(),
@@ -307,7 +309,10 @@ function buildBookingCreateData(
   };
 }
 
-export async function createBooking(args: CreateBookingArgs) {
+export async function createBooking(
+  args: CreateBookingArgs,
+  opts: { createdByAdmin?: boolean } = {},
+) {
   const prepared = await prepareBooking(args);
   const guest: GuestInfo = {
     guestName: args.guestName,
@@ -319,7 +324,9 @@ export async function createBooking(args: CreateBookingArgs) {
   return prisma.$transaction(
     async (tx) => {
       await assertAvailable(tx, prepared);
-      return tx.booking.create({ data: buildBookingCreateData(prepared, guest) });
+      return tx.booking.create({
+        data: buildBookingCreateData(prepared, guest, undefined, opts.createdByAdmin ?? false),
+      });
     },
     { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
   );
@@ -418,8 +425,10 @@ export async function rescheduleBooking(bookingId: string, schedule: RescheduleA
 export async function createBookingGroup(
   items: BookingScheduleArgs[],
   guest: GuestInfo,
+  opts: { createdByAdmin?: boolean } = {},
 ) {
   if (items.length === 0) throw new Error("Не выбран ни один объект");
+  const createdByAdmin = opts.createdByAdmin ?? false;
 
   // Тяжёлые расчёты (загрузка, цена, предоплата) — до транзакции.
   const prepared = await Promise.all(items.map((a) => prepareBooking(a)));
@@ -445,6 +454,7 @@ export async function createBookingGroup(
           totalPrice,
           prepaymentAmount,
           status: "PENDING",
+          createdByAdmin,
         },
       });
 
@@ -452,7 +462,9 @@ export async function createBookingGroup(
       // транзакции бронь видна следующим проверкам (защита от дублей внутри заказа).
       for (const p of prepared) {
         await assertAvailable(tx, p);
-        await tx.booking.create({ data: buildBookingCreateData(p, guest, group.id) });
+        await tx.booking.create({
+          data: buildBookingCreateData(p, guest, group.id, createdByAdmin),
+        });
       }
 
       return tx.bookingGroup.findUniqueOrThrow({
@@ -542,6 +554,7 @@ export async function findExpiringPendingBookings(now: Date = new Date()) {
     where: {
       status: "PENDING",
       groupId: null, // групповые брони напоминаем на уровне заказа
+      createdByAdmin: false, // ручные брони онлайн не оплачивают — не напоминаем
       createdAt: { lte: remindAt, gt: expireAt },
     },
     select: { id: true },
@@ -553,6 +566,7 @@ export async function findExpiringPendingGroups(now: Date = new Date()) {
   return prisma.bookingGroup.findMany({
     where: {
       status: "PENDING",
+      createdByAdmin: false,
       createdAt: { lte: remindAt, gt: expireAt },
     },
     select: { id: true },
@@ -560,20 +574,30 @@ export async function findExpiringPendingGroups(now: Date = new Date()) {
 }
 
 /**
- * Отмена просроченных PENDING-броней.
+ * Отмена просроченных PENDING-броней. Отменяет ТОЛЬКО клиентские брони
+ * (createdByAdmin = false) — ручные брони администратора авто-отмене не
+ * подлежат. Возвращает id отменённых броней, чтобы вызывающий разослал
+ * уведомления гостям.
  */
-export async function cancelExpiredBookings(now: Date = new Date()) {
+export async function cancelExpiredBookings(now: Date = new Date()): Promise<string[]> {
   const cutoff = new Date(now.getTime() - env.PAYMENT_TIMEOUT_MINUTES * 60_000);
-  const result = await prisma.booking.updateMany({
+  const expired = await prisma.booking.findMany({
     where: {
       status: "PENDING",
+      createdByAdmin: false,
       createdAt: { lt: cutoff },
     },
+    select: { id: true },
+  });
+  if (expired.length === 0) return [];
+  const ids = expired.map((b) => b.id);
+  await prisma.booking.updateMany({
+    where: { id: { in: ids } },
     data: {
       status: "CANCELLED",
       cancelReason: "Истёк срок оплаты",
       cancelledAt: now,
     },
   });
-  return result.count;
+  return ids;
 }

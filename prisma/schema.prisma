@@ -218,6 +218,9 @@ model Booking {
   group           BookingGroup?     @relation(fields: [groupId], references: [id], onDelete: Restrict)
   payment         Payment?
   notifications   NotificationLog[]
+  // Бронь создана администратором вручную — такие НЕ отменяются автоматически
+  // по истечении срока оплаты (в отличие от клиентских с онлайн-оплатой).
+  createdByAdmin  Boolean           @default(false)
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
   paidAt          DateTime?
@@ -246,6 +249,8 @@ model BookingGroup {
   status           BookingStatus  @default(PENDING)
   bookings         Booking[]
   payment          Payment?
+  // Заказ создан администратором вручную — не отменяется автоматически.
+  createdByAdmin   Boolean        @default(false)
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
   paidAt           DateTime?

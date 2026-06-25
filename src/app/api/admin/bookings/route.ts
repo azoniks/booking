@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
       guestEmail: data.guestEmail || "",
       guestPhone: data.guestPhone,
       guestComment: data.guestComment,
-    });
+    }, { createdByAdmin: true });
     // Стартовый статус оплаты по выбору администратора (none/prepaid/paid).
     if (data.paymentState !== "none") {
       const { status, paidAt } = paymentStateToStatus(data.paymentState);

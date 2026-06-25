@@ -8,6 +8,7 @@ import {
   sendReminder,
   sendPaymentLinkEmail,
   sendPaymentLinkGroupEmail,
+  sendBookingExpiredEmail,
 } from "./notifications/email";
 import { recordServerError } from "./server-errors";
 
@@ -45,8 +46,15 @@ export function startScheduler() {
       logSchedulerError("expiry-reminder", e);
     }
     try {
-      const n = await cancelExpiredBookings();
-      if (n > 0) console.log(`[scheduler] cancelled ${n} expired pending bookings`);
+      const cancelledIds = await cancelExpiredBookings();
+      if (cancelledIds.length > 0) {
+        console.log(`[scheduler] cancelled ${cancelledIds.length} expired pending bookings`);
+        // Уведомляем гостей об отмене (одиночные брони; групповые пропускаются
+        // внутри функции отправки).
+        await Promise.allSettled(
+          cancelledIds.map((id) => sendBookingExpiredEmail(id)),
+        );
+      }
     } catch (e) {
       logSchedulerError("cancel", e);
     }

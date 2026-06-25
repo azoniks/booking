@@ -23,12 +23,16 @@ export async function POST(req: NextRequest) {
       guestPhone: data.guestPhone,
       objectIds: data.items.map((i) => i.objectId),
     };
-    const group = await createBookingGroup(data.items, {
-      guestName: data.guestName,
-      guestEmail: data.guestEmail || "",
-      guestPhone: data.guestPhone,
-      guestComment: data.guestComment,
-    });
+    const group = await createBookingGroup(
+      data.items,
+      {
+        guestName: data.guestName,
+        guestEmail: data.guestEmail || "",
+        guestPhone: data.guestPhone,
+        guestComment: data.guestComment,
+      },
+      { createdByAdmin: true },
+    );
 
     // Стартовый статус оплаты заказа и всех его броней (none/prepaid/paid).
     if (data.paymentState !== "none") {

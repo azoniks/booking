@@ -551,6 +551,43 @@ export async function sendPaymentLinkEmail(
   });
 }
 
+/**
+ * Гостю — об авто-отмене брони из-за неоплаты. Шлётся один раз. Для броней в
+ * составе заказа (groupId) пропускаем, чтобы не дублировать на каждый объект —
+ * у заказа отмена уведомляется отдельно.
+ */
+export async function sendBookingExpiredEmail(bookingId: string) {
+  const b = await prisma.booking.findUnique({
+    where: { id: bookingId },
+    include: { object: true },
+  });
+  if (!b || b.groupId) return;
+
+  const text = [
+    `Здравствуйте, ${b.guestName}!`,
+    `Бронь ${b.publicCode} отменена: оплата не поступила в течение отведённого времени.`,
+    ``,
+    `Объект: ${b.object.name}`,
+    `Время: ${formatLocal(b.startAt)} — ${formatLocal(b.endAt)}`,
+    ``,
+    `Если бронь всё ещё актуальна — оформите её заново на сайте.`,
+  ].join("\n");
+
+  await Promise.allSettled([
+    b.guestEmail
+      ? sendEmail({
+          to: b.guestEmail,
+          subject: `Бронь ${b.publicCode} отменена`,
+          text,
+          bookingId,
+          kind: "guest_expired",
+        })
+      : Promise.resolve(),
+    // В подписанные мессенджеры гостя (если есть).
+    sendToGuestAll(bookingId, text, "guest_expired"),
+  ]);
+}
+
 /** То же, но для группового заказа (ссылка /booking/retry?group=...). */
 export async function sendPaymentLinkGroupEmail(
   groupId: string,
