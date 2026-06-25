@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { CategoryTabs } from "@/components/client/CategoryTabs";
 import { CartBadge } from "@/components/client/CartBadge";
@@ -61,6 +62,12 @@ export default async function HomePage({
             <h1 className="text-xl md:text-2xl font-bold truncate">{siteName}</h1>
           </div>
           <div className="flex items-center gap-3 shrink-0">
+            <Link
+              href="/how-to-book"
+              className="text-sm text-muted-foreground hover:text-foreground hidden sm:inline whitespace-nowrap"
+            >
+              Как забронировать?
+            </Link>
             {siteContact && (
               <a
                 href={`tel:${siteContact}`}
