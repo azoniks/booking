@@ -16,8 +16,9 @@ export async function POST(req: NextRequest) {
     const succeeded = status === "CONFIRMED" || status === "AUTHORIZED";
     if (externalId) {
       const res = await applyPaymentResult({ externalId, succeeded, rawPayload: payload });
-      // Оплата прошла — рассылаем уведомления (клиенту + админам).
-      if (res?.succeeded) {
+      // Уведомления — только при ПЕРВОМ переходе платежа в успех (Tinkoff может
+      // прислать несколько вебхуков: AUTHORIZED, CONFIRMED, ретраи).
+      if (res?.succeeded && res.firstSettle) {
         if (res.groupId) {
           // Групповой заказ — агрегированное уведомление.
           sendPaidGroupNotifications(res.groupId).catch((e) => console.error("[notify group]", e));

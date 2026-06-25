@@ -454,21 +454,31 @@ export async function applyPaymentResult(args: {
   });
   if (!payment) return null;
 
+  // Tinkoff может прислать несколько вебхуков по одному платежу (AUTHORIZED,
+  // затем CONFIRMED, плюс ретраи). Обрабатываем переход в успех ОДИН раз —
+  // иначе дублируются уведомления, а повторный settle мог бы откатить уже
+  // PAID-бронь обратно в PREPAID.
+  const alreadySucceeded = payment.status === "SUCCEEDED";
+
   if (args.succeeded) {
-    await settleSuccess(payment, args.rawPayload);
-  } else {
+    if (!alreadySucceeded) {
+      await settleSuccess(payment, args.rawPayload);
+    }
+  } else if (!alreadySucceeded) {
     // Неуспех по вебхуку: помечаем только платёж (бронь остаётся PENDING — клиент
-    // может повторить оплату до истечения срока).
+    // может повторить оплату). Уже успешный платёж неуспехом НЕ затираем.
     await prisma.payment.update({
       where: { id: payment.id },
       data: { status: "FAILED", rawPayload: args.rawPayload as object },
     });
   }
-  // Возвращаем привязку платежа, чтобы вызывающий мог разослать уведомления.
+  // firstSettle=true только при ПЕРВОМ переходе в успех — по нему вызывающий
+  // решает, слать ли уведомления (чтобы не дублировать).
   return {
     bookingId: payment.bookingId,
     groupId: payment.groupId,
     succeeded: args.succeeded,
+    firstSettle: args.succeeded && !alreadySucceeded,
   };
 }
 

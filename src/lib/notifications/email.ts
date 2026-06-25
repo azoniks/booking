@@ -246,6 +246,12 @@ export async function sendPaidNotifications(bookingId: string) {
   });
   if (!b) return;
 
+  // Защита от дублей: если уведомление об оплате уже уходило — не повторяем.
+  const alreadyPaidNotified = await prisma.notificationLog.count({
+    where: { bookingId, kind: { in: ["guest_paid", "admin_paid"] }, status: "sent" },
+  });
+  if (alreadyPaidNotified > 0) return;
+
   const remaining = Number(b.totalPrice) - Number(b.prepaymentAmount);
   const guestLines = [
     `Здравствуйте, ${b.guestName}!`,
@@ -398,6 +404,19 @@ export async function sendNewBookingGroupNotifications(groupId: string) {
 export async function sendPaidGroupNotifications(groupId: string) {
   const g = await loadGroup(groupId);
   if (!g) return;
+
+  // Защита от дублей по первой броне заказа.
+  const firstId = g.bookings[0]?.id;
+  if (firstId) {
+    const alreadyPaidNotified = await prisma.notificationLog.count({
+      where: {
+        bookingId: firstId,
+        kind: { in: ["guest_paid_group", "admin_paid_group"] },
+        status: "sent",
+      },
+    });
+    if (alreadyPaidNotified > 0) return;
+  }
 
   const total = Number(g.totalPrice);
   const prepay = Number(g.prepaymentAmount);
