@@ -1,6 +1,8 @@
+// ВАЖНО: при структуре с папкой src/ этот файл должен лежать именно в src/
+// (Next ищет src/instrumentation.ts). В корне проекта он игнорируется.
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
-    const { startScheduler } = await import("./src/lib/scheduler");
+    const { startScheduler } = await import("@/lib/scheduler");
     startScheduler();
   }
 }
@@ -15,7 +17,7 @@ export async function onRequestError(
 ) {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
   try {
-    const { recordServerError } = await import("./src/lib/server-errors");
+    const { recordServerError } = await import("@/lib/server-errors");
     const e = err as { message?: string; stack?: string; digest?: string };
     await recordServerError({
       source: context?.routeType === "route" ? "API" : "RENDER",
