@@ -105,6 +105,7 @@ type BookingItem = {
   guestComment: string | null;
   guestsCount: number;
   totalPrice: string;
+  prepaymentAmount: string;
   groupId: string | null;
   group: { publicCode: string; status: string; totalPrice: string } | null;
 };
@@ -912,6 +913,14 @@ function DayBookingRow({
             <div className="flex items-center gap-1.5 flex-wrap text-xs text-muted-foreground">
               Статус оплаты: <PayBadge status={b.status} />
             </div>
+            {prepaid && Number(b.prepaymentAmount) > 0 && (
+              <div className="text-xs text-muted-foreground">
+                Внесён аванс: <span className="font-medium text-foreground">{formatRub(b.prepaymentAmount)}</span>
+                {Number(b.totalPrice) - Number(b.prepaymentAmount) > 0 && (
+                  <> · остаток {formatRub(Number(b.totalPrice) - Number(b.prepaymentAmount))} на месте</>
+                )}
+              </div>
+            )}
             <div className="text-xs text-muted-foreground">
               Гость: {b.guestName} · {b.guestsCount} гост.
             </div>

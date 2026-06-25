@@ -52,6 +52,7 @@ export async function GET(req: NextRequest) {
           guestComment: true,
           guestsCount: true,
           totalPrice: true,
+          prepaymentAmount: true,
           groupId: true,
           group: { select: { publicCode: true, status: true, totalPrice: true } },
         },
@@ -100,6 +101,7 @@ export async function GET(req: NextRequest) {
         endAt: b.endAt.toISOString(),
         blockedUntil: b.blockedUntil.toISOString(),
         totalPrice: b.totalPrice.toString(),
+        prepaymentAmount: b.prepaymentAmount.toString(),
         group: b.group
           ? {
               publicCode: b.group.publicCode,
