@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Users, ChevronLeft, ChevronRight } from "lucide-react";
+import { Users, ChevronLeft, ChevronRight, FilterX } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -200,6 +200,10 @@ export default async function BookingsPage({
     return qs ? `/admin/bookings?${qs}` : "/admin/bookings";
   };
 
+  // Сброс всех фильтров (сортировку сохраняем).
+  const activeFilterCount = countActiveBookingFilters(filters);
+  const resetFiltersHref = sp.sort ? `/admin/bookings?sort=${sp.sort}` : "/admin/bookings";
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
@@ -214,6 +218,19 @@ export default async function BookingsPage({
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {activeFilterCount > 0 && (
+            <Link
+              href={resetFiltersHref}
+              className="inline-flex items-center gap-1.5 h-10 px-3 rounded-md border bg-background text-sm text-muted-foreground hover:bg-slate-50 whitespace-nowrap"
+              title="Сбросить все фильтры"
+            >
+              <FilterX className="w-4 h-4" />
+              <span className="hidden sm:inline">Сбросить фильтры</span>
+              <span className="inline-flex items-center justify-center min-w-5 h-5 px-1 rounded-full bg-primary text-primary-foreground text-xs">
+                {activeFilterCount}
+              </span>
+            </Link>
+          )}
           <BookingsSortSelect value={activeSort} />
           <BookingsBulkDelete filters={rawFilters} visibleCount={totalCount} />
           <Link
@@ -228,7 +245,7 @@ export default async function BookingsPage({
         </div>
       </div>
 
-      <CollapsibleFilters activeCount={countActiveBookingFilters(filters)}>
+      <CollapsibleFilters activeCount={activeFilterCount}>
         <BookingsFilters
           categories={filterCategories}
           types={filterTypes}
