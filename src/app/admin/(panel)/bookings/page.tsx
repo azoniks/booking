@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Users } from "lucide-react";
+import { Users, ChevronLeft, ChevronRight } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -64,6 +64,7 @@ export default async function BookingsPage({
     to?: string;
     dateField?: string;
     sort?: string;
+    page?: string;
   }>;
 }) {
   const sp = await searchParams;
@@ -81,11 +82,17 @@ export default async function BookingsPage({
     dateField: sp.dateField,
   };
   const activeSort = (sp.sort as BookingsSort) || DEFAULT_BOOKINGS_SORT;
+  const where = buildBookingsWhere(filters);
+  const PAGE_SIZE = 100;
+  const totalCount = await prisma.booking.count({ where });
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const page = Math.min(totalPages, Math.max(1, Number(sp.page) || 1));
   const [items, objects] = await Promise.all([
     prisma.booking.findMany({
-      where: buildBookingsWhere(filters),
+      where,
       orderBy: bookingsOrderBy(activeSort),
-      take: 100,
+      skip: (page - 1) * PAGE_SIZE,
+      take: PAGE_SIZE,
       include: {
         object: { include: { objectType: { include: { category: true } } } },
         payment: true,
@@ -182,13 +189,33 @@ export default async function BookingsPage({
     }
   }
 
+  // Ссылка на страницу N с сохранением текущих фильтров/сортировки.
+  const pageHref = (p: number) => {
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries(sp)) {
+      if (v && k !== "page") params.set(k, String(v));
+    }
+    if (p > 1) params.set("page", String(p));
+    const qs = params.toString();
+    return qs ? `/admin/bookings?${qs}` : "/admin/bookings";
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <h1 className="text-2xl font-bold">Брони</h1>
+        <div>
+          <h1 className="text-2xl font-bold">Брони</h1>
+          <p className="text-sm text-muted-foreground">
+            {totalCount === 0
+              ? "Записей нет"
+              : totalPages > 1
+                ? `Записей: ${totalCount} · показано ${(page - 1) * PAGE_SIZE + 1}–${(page - 1) * PAGE_SIZE + items.length} (стр. ${page}/${totalPages})`
+                : `Записей: ${totalCount}`}
+          </p>
+        </div>
         <div className="flex items-center gap-2">
           <BookingsSortSelect value={activeSort} />
-          <BookingsBulkDelete filters={rawFilters} visibleCount={items.length} />
+          <BookingsBulkDelete filters={rawFilters} visibleCount={totalCount} />
           <Link
             href="/admin/bookings/new-group"
             aria-label="Групповой заказ"
@@ -293,6 +320,34 @@ export default async function BookingsPage({
           <p className="text-sm text-muted-foreground">Нет броней</p>
         )}
       </div>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between gap-2 pt-2">
+          {page > 1 ? (
+            <Link
+              href={pageHref(page - 1)}
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md border bg-background text-sm hover:bg-slate-50"
+            >
+              <ChevronLeft className="w-4 h-4" /> Назад
+            </Link>
+          ) : (
+            <span />
+          )}
+          <span className="text-sm text-muted-foreground">
+            Страница {page} из {totalPages}
+          </span>
+          {page < totalPages ? (
+            <Link
+              href={pageHref(page + 1)}
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md border bg-background text-sm hover:bg-slate-50"
+            >
+              Вперёд <ChevronRight className="w-4 h-4" />
+            </Link>
+          ) : (
+            <span />
+          )}
+        </div>
+      )}
     </div>
   );
 }

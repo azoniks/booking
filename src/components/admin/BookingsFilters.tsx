@@ -77,6 +77,8 @@ export function BookingsFilters({
   // ключ), сохраняет sort и прочие параметры, переходит на новый URL.
   function setParams(updates: Record<string, string | undefined>) {
     const sp = new URLSearchParams(params.toString());
+    // Любое изменение фильтра возвращает на первую страницу.
+    sp.delete("page");
     for (const [key, value] of Object.entries(updates)) {
       if (value) sp.set(key, value);
       else sp.delete(key);

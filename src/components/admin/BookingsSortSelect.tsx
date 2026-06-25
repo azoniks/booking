@@ -35,6 +35,7 @@ export function BookingsSortSelect({ value }: { value: BookingsSort }) {
 
   function onChange(next: BookingsSort) {
     const sp = new URLSearchParams(params.toString());
+    sp.delete("page"); // смена сортировки — на первую страницу
     if (next === DEFAULT_BOOKINGS_SORT) sp.delete("sort");
     else sp.set("sort", next);
     const qs = sp.toString();
