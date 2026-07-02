@@ -5,6 +5,7 @@ import { XCircle, RefreshCcw, Clock } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { env } from "@/lib/env";
 import { sendPaymentRetryEmail } from "@/lib/notifications/email";
+import { SiteHeader } from "@/components/client/SiteHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +36,9 @@ export default async function FailedPage({
     const remaining = grp ? Math.max(0, Math.ceil(env.PAYMENT_TIMEOUT_MINUTES - elapsed)) : 0;
     const canRetry = grp != null && grp.status === "PENDING" && remaining > 0;
     return (
-      <div className="min-h-screen flex items-center justify-center p-4 bg-slate-50">
+      <div className="min-h-screen flex flex-col bg-slate-50">
+        <SiteHeader />
+        <main className="flex-1 flex items-center justify-center p-4">
         <Card className="max-w-lg w-full">
           <CardHeader>
             <div className="flex items-center gap-3">
@@ -78,6 +81,7 @@ export default async function FailedPage({
             </Button>
           </CardContent>
         </Card>
+        </main>
       </div>
     );
   }
@@ -111,7 +115,9 @@ export default async function FailedPage({
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-slate-50">
+    <div className="min-h-screen flex flex-col bg-slate-50">
+      <SiteHeader />
+      <main className="flex-1 flex items-center justify-center p-4">
       <Card className="max-w-lg w-full">
         <CardHeader>
           <div className="flex items-center gap-3">
@@ -182,6 +188,7 @@ export default async function FailedPage({
           </Button>
         </CardContent>
       </Card>
+      </main>
     </div>
   );
 }

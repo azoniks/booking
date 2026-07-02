@@ -6,26 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { Trash2 } from "lucide-react";
-import { formatLocal } from "@/lib/time";
 import { toast } from "@/components/ui/use-toast";
 
-type Block = {
-  id: string;
-  objectId: string;
-  objectName: string;
-  startAt: string;
-  endAt: string;
-  reason: string | null;
-};
+type ObjectOption = { id: string; name: string; categoryName: string };
 
-export function BlocksManager({
-  initial,
-  objects,
-}: {
-  initial: Block[];
-  objects: { id: string; name: string; categoryName: string }[];
-}) {
+export function BlockCreateForm({ objects }: { objects: ObjectOption[] }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
@@ -67,18 +52,6 @@ export function BlocksManager({
     toast({ title: `Блокировок создано: ${j.data?.count ?? selected.length}` });
     setOpen(false);
     setSelected([]);
-    router.refresh();
-  }
-
-  async function del(id: string) {
-    if (!confirm("Удалить блокировку?")) return;
-    const res = await fetch(`/api/admin/blocks/${id}`, { method: "DELETE" });
-    const j = await res.json();
-    if (!j.ok) {
-      toast({ title: "Ошибка", description: j.error || "Не удалось удалить", variant: "destructive" });
-      return;
-    }
-    toast({ title: "Блокировка удалена" });
     router.refresh();
   }
 
@@ -136,26 +109,6 @@ export function BlocksManager({
           </CardContent>
         </Card>
       )}
-
-      <div className="space-y-2">
-        {initial.map((b) => (
-          <Card key={b.id}>
-            <CardContent className="p-3 flex items-center justify-between gap-2">
-              <div>
-                <div className="font-medium">{b.objectName}</div>
-                <div className="text-sm text-muted-foreground">
-                  {formatLocal(new Date(b.startAt))} — {formatLocal(new Date(b.endAt))}
-                </div>
-                {b.reason && <div className="text-sm">{b.reason}</div>}
-              </div>
-              <Button size="icon" variant="outline" onClick={() => del(b.id)}>
-                <Trash2 className="w-4 h-4" />
-              </Button>
-            </CardContent>
-          </Card>
-        ))}
-        {initial.length === 0 && <p className="text-sm text-muted-foreground">Блокировок нет</p>}
-      </div>
     </div>
   );
 }

@@ -1,7 +1,6 @@
 import { prisma } from "@/lib/db";
 import { CategoryTabs } from "@/components/client/CategoryTabs";
-import { CartBadge } from "@/components/client/CartBadge";
-import { ClientHeaderNav } from "@/components/client/ClientHeaderNav";
+import { SiteHeader } from "@/components/client/SiteHeader";
 import { slotDurationHours } from "@/lib/slots";
 
 export const dynamic = "force-dynamic";
@@ -41,35 +40,10 @@ export default async function HomePage({
 
   const settingsMap = new Map<string, unknown>(settings.map((s) => [s.key, s.value]));
   const siteName = String(settingsMap.get("siteName") || "Бронирование");
-  const siteContact = String(settingsMap.get("siteContact") || "");
-  const siteLogoUrl = String(settingsMap.get("siteLogoUrl") || "");
-  const mainSiteUrl = String(settingsMap.get("mainSiteUrl") || "").trim();
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
-      <header className="border-b bg-white sticky top-0 z-10">
-        <div className="container py-4 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3 min-w-0">
-            {siteLogoUrl && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={siteLogoUrl}
-                alt={siteName}
-                className="h-10 w-auto object-contain shrink-0"
-              />
-            )}
-            <h1 className="text-xl md:text-2xl font-bold truncate">{siteName}</h1>
-          </div>
-          <div className="flex items-center gap-3 shrink-0">
-            <CartBadge />
-            <ClientHeaderNav
-              siteName={siteName}
-              siteContact={siteContact}
-              mainSiteUrl={mainSiteUrl}
-            />
-          </div>
-        </div>
-      </header>
+      <SiteHeader />
 
       <main className="container py-6 flex-1">
         {categories.length === 0 ? (

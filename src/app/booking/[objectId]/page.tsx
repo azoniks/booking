@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { SiteHeader } from "@/components/client/SiteHeader";
 import { BookingForm } from "@/components/client/BookingForm";
 import { MediaSlider } from "@/components/client/MediaSlider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -106,13 +106,15 @@ export default async function BookingPage({ params }: { params: Promise<{ object
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <header className="border-b bg-white sticky top-0 z-10">
-        <div className="container py-4 flex items-center justify-between">
-          <Link href="/" className="text-sm text-muted-foreground hover:underline">
-            ← На главную
-          </Link>
-        </div>
-      </header>
+      <SiteHeader
+        breadcrumbs={[
+          {
+            label: obj.objectType.category.name,
+            href: `/?cat=${obj.objectType.category.slug}`,
+          },
+          { label: obj.name },
+        ]}
+      />
 
       <main className="container py-6 space-y-6">
         {/* Заголовок на всю ширину */}

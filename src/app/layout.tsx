@@ -46,13 +46,17 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // Публичные настройки для клиента: ссылки на документы + кук-баннер.
+  // Публичные настройки для клиента: ссылки на документы + кук-баннер + шапка.
   const keys = [
     "privacyPolicyUrl",
     "personalDataUrl",
     "cookieBannerEnabled",
     "cookieBannerText",
     "cookieBannerReshowDays",
+    "siteName",
+    "siteLogoUrl",
+    "siteContact",
+    "mainSiteUrl",
   ];
   const rows = await prisma.settings
     .findMany({ where: { key: { in: keys } } })
@@ -65,6 +69,10 @@ export default async function RootLayout({
 
   const privacyPolicyUrl = str("privacyPolicyUrl");
   const personalDataUrl = str("personalDataUrl");
+  const siteName = str("siteName") || "Бронирование";
+  const siteLogoUrl = str("siteLogoUrl");
+  const siteContact = str("siteContact");
+  const mainSiteUrl = str("mainSiteUrl").trim();
   const cookieBannerEnabled = str("cookieBannerEnabled") === "true";
   const cookieBannerText = str("cookieBannerText") || DEFAULT_COOKIE_TEXT;
   const reshowRaw = Number(str("cookieBannerReshowDays"));
@@ -74,7 +82,16 @@ export default async function RootLayout({
   return (
     <html lang="ru">
       <body className="min-h-screen bg-background text-foreground antialiased">
-        <SiteConfigProvider value={{ privacyPolicyUrl, personalDataUrl }}>
+        <SiteConfigProvider
+          value={{
+            privacyPolicyUrl,
+            personalDataUrl,
+            siteName,
+            siteLogoUrl,
+            siteContact,
+            mainSiteUrl,
+          }}
+        >
           <CartProvider>{children}</CartProvider>
         </SiteConfigProvider>
         <CookieConsentBanner

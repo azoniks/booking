@@ -4,6 +4,7 @@ import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { SiteHeader } from "@/components/client/SiteHeader";
 
 function MockPayInner() {
   const params = useSearchParams();
@@ -65,10 +66,13 @@ function MockPayInner() {
 
 export default function MockPaymentPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-slate-50">
-      <Suspense fallback={<p>Загрузка…</p>}>
-        <MockPayInner />
-      </Suspense>
+    <div className="min-h-screen flex flex-col bg-slate-50">
+      <SiteHeader />
+      <main className="flex-1 flex items-center justify-center p-4">
+        <Suspense fallback={<p>Загрузка…</p>}>
+          <MockPayInner />
+        </Suspense>
+      </main>
     </div>
   );
 }

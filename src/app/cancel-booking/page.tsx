@@ -1,6 +1,5 @@
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import type { Metadata } from "next";
+import { SiteHeader } from "@/components/client/SiteHeader";
 
 export const metadata: Metadata = {
   title: "Отмена брони",
@@ -10,16 +9,7 @@ export const metadata: Metadata = {
 export default function CancelBookingPage() {
   return (
     <div className="min-h-screen bg-slate-50">
-      <header className="border-b bg-white">
-        <div className="container py-4">
-          <Link
-            href="/"
-            className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
-          >
-            <ArrowLeft className="w-4 h-4 mr-1" /> На главную
-          </Link>
-        </div>
-      </header>
+      <SiteHeader breadcrumbs={[{ label: "Отмена брони" }]} />
 
       <main className="container max-w-3xl py-8 space-y-8">
         <div className="space-y-2">

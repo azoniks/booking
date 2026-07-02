@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { formatLocal } from "@/lib/time";
 import { CheckCircle2 } from "lucide-react";
 import { MessengerOptIn } from "@/components/client/MessengerOptIn";
+import { SiteHeader } from "@/components/client/SiteHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +34,9 @@ export default async function SuccessPage({
     const remaining = Math.max(0, total - prepay);
     const fmt = (n: number) => n.toLocaleString("ru-RU");
     return (
-      <div className="min-h-screen flex items-center justify-center p-4 bg-slate-50">
+      <div className="min-h-screen flex flex-col bg-slate-50">
+        <SiteHeader />
+        <main className="flex-1 flex items-center justify-center p-4">
         <Card className="max-w-lg w-full">
           <CardHeader>
             <div className="flex items-center gap-3">
@@ -83,6 +86,7 @@ export default async function SuccessPage({
             </Button>
           </CardContent>
         </Card>
+        </main>
       </div>
     );
   }
@@ -95,7 +99,9 @@ export default async function SuccessPage({
     : null;
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-slate-50">
+    <div className="min-h-screen flex flex-col bg-slate-50">
+      <SiteHeader />
+      <main className="flex-1 flex items-center justify-center p-4">
       <Card className="max-w-lg w-full">
         <CardHeader>
           <div className="flex items-center gap-3">
@@ -154,6 +160,7 @@ export default async function SuccessPage({
           </Button>
         </CardContent>
       </Card>
+      </main>
     </div>
   );
 }

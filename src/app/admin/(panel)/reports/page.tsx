@@ -16,6 +16,10 @@ export const dynamic = "force-dynamic";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+// Статусы, которые считаются доходом (идут в оборот, предоплаты и разбивку по
+// типам). Остальные (PENDING, NO_SHOW, CANCELLED) в денежные метрики не входят.
+const REVENUE_STATUSES = new Set<string>(["PREPAID", "PAID", "COMPLETED"]);
+
 const STATUS_ORDER = ["PENDING", "PREPAID", "PAID", "COMPLETED", "NO_SHOW", "CANCELLED"] as const;
 const STATUS_LABEL: Record<string, string> = {
   PENDING: "Ожидают",
@@ -74,23 +78,28 @@ export default async function ReportsPage({
   type Agg = { count: number; turnover: number; prepay: number };
   const byStatus = new Map<string, Agg>();
   const byType = new Map<string, Agg & { name: string }>();
-  let totalCount = 0;
-  let totalTurnover = 0; // без отменённых
-  let totalPrepay = 0; // без отменённых
+  let totalCount = 0; // без отменённых
+  let totalTurnover = 0; // только оплаченные/завершённые
+  let totalPrepay = 0; // только оплаченные/завершённые
 
   for (const b of bookings) {
     const price = Number(b.totalPrice);
     const pre = Number(b.prepaymentAmount);
 
+    // «По статусам» — справочная разбивка по всем статусам, как есть.
     const s = byStatus.get(b.status) ?? { count: 0, turnover: 0, prepay: 0 };
     s.count++;
     s.turnover += price;
     s.prepay += pre;
     byStatus.set(b.status, s);
 
-    totalCount++;
+    // «Всего броней» — без отменённых.
+    if (b.status !== "CANCELLED") totalCount++;
 
-    if (b.status !== "CANCELLED") {
+    // Деньги (оборот, предоплаты) и разбивка по типам — только по броням,
+    // реально принёсшим доход: оплаченные, с авансом и завершённые. PENDING
+    // (не оплачено), NO_SHOW (не пришёл) и CANCELLED в деньги не идут.
+    if (REVENUE_STATUSES.has(b.status)) {
       totalTurnover += price;
       totalPrepay += pre;
       const t = b.object.objectType;
@@ -109,7 +118,8 @@ export default async function ReportsPage({
       <div>
         <h1 className="text-2xl font-bold">Отчёты</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          За период по дате заезда. Оборот и предоплаты — без учёта отменённых броней.
+          За период по дате заезда. «Всего броней» — без отменённых. Оборот и
+          предоплаты — только по оплаченным, с авансом и завершённым броням.
         </p>
       </div>
 
@@ -119,7 +129,9 @@ export default async function ReportsPage({
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground font-medium">Всего броней</CardTitle>
+            <CardTitle className="text-sm text-muted-foreground font-medium">
+              Всего броней (без отменённых)
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">{totalCount}</div>
@@ -128,7 +140,7 @@ export default async function ReportsPage({
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-muted-foreground font-medium">
-              Оборот (без отменённых)
+              Оборот (оплаченные)
             </CardTitle>
           </CardHeader>
           <CardContent>

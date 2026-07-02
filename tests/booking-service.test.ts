@@ -4,6 +4,7 @@ import {
   createBooking,
   BookingConflictError,
   cancelExpiredBookings,
+  completeFinishedPrepaidBookings,
 } from "../src/lib/booking-service";
 import { execSync } from "node:child_process";
 
@@ -661,6 +662,72 @@ describe("cancelExpiredBookings", () => {
     });
     const cancelled = await cancelExpiredBookings();
     expect(cancelled).toHaveLength(0);
+    const after = await testDb.booking.findUnique({ where: { id: b.id } });
+    expect(after?.status).toBe("PENDING");
+  });
+});
+
+describe("completeFinishedPrepaidBookings", () => {
+  // Хелпер: оплаченная бронь (статус `status`), окончившаяся `hoursAgo` часов назад.
+  async function seedFinished(status: "PREPAID" | "PAID", hoursAgo: number) {
+    const obj = await seedHourlyObject({ cleaningMinutes: 0 });
+    const b = await createBooking({
+      objectId: obj.id,
+      startAt: "2026-07-05T10:00:00Z",
+      endAt: "2026-07-05T12:00:00Z",
+      guestsCount: 4,
+      ...guest,
+    });
+    await testDb.booking.update({
+      where: { id: b.id },
+      data: {
+        status,
+        endAt: new Date(Date.now() - hoursAgo * 60 * 60_000),
+      },
+    });
+    return b;
+  }
+
+  it("закрывает PREPAID-бронь через 4 часа после окончания", async () => {
+    const b = await seedFinished("PREPAID", 5);
+    const completed = await completeFinishedPrepaidBookings();
+    expect(completed).toContain(b.id);
+    const after = await testDb.booking.findUnique({ where: { id: b.id } });
+    expect(after?.status).toBe("COMPLETED");
+  });
+
+  it("закрывает PAID-бронь через 4 часа после окончания", async () => {
+    const b = await seedFinished("PAID", 5);
+    const completed = await completeFinishedPrepaidBookings();
+    expect(completed).toContain(b.id);
+    const after = await testDb.booking.findUnique({ where: { id: b.id } });
+    expect(after?.status).toBe("COMPLETED");
+  });
+
+  it("не трогает оплаченную бронь раньше 4 часов после окончания", async () => {
+    const b = await seedFinished("PREPAID", 1);
+    const completed = await completeFinishedPrepaidBookings();
+    expect(completed).toHaveLength(0);
+    const after = await testDb.booking.findUnique({ where: { id: b.id } });
+    expect(after?.status).toBe("PREPAID");
+  });
+
+  it("не закрывает брони с другим статусом (напр. PENDING), даже давно оконченные", async () => {
+    const obj = await seedHourlyObject({ cleaningMinutes: 0 });
+    const b = await createBooking({
+      objectId: obj.id,
+      startAt: "2026-07-06T10:00:00Z",
+      endAt: "2026-07-06T12:00:00Z",
+      guestsCount: 4,
+      ...guest,
+    });
+    // Статус остаётся PENDING (аванс не внесён), окончание — сутки назад.
+    await testDb.booking.update({
+      where: { id: b.id },
+      data: { endAt: new Date(Date.now() - 24 * 60 * 60_000) },
+    });
+    const completed = await completeFinishedPrepaidBookings();
+    expect(completed).toHaveLength(0);
     const after = await testDb.booking.findUnique({ where: { id: b.id } });
     expect(after?.status).toBe("PENDING");
   });

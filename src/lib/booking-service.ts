@@ -601,3 +601,38 @@ export async function cancelExpiredBookings(now: Date = new Date()): Promise<str
   });
   return ids;
 }
+
+// Статусы, из которых бронь авто-закрывается в COMPLETED: оплачена полностью
+// (PAID) или внесён аванс (PREPAID). Другие статусы автомат не трогает.
+const AUTOCOMPLETE_FROM_STATUSES = ["PREPAID", "PAID"] as const;
+
+/**
+ * Авто-закрытие завершённых оплаченных броней. Бронь переводится в COMPLETED,
+ * если:
+ *  - её статус PREPAID (аванс внесён) или PAID (оплачена полностью), и другого
+ *    статуса не выставляли;
+ *  - с момента окончания брони (endAt) прошло не меньше
+ *    AUTOCOMPLETE_AFTER_MINUTES (по умолчанию 4 часа).
+ * Возвращает id закрытых броней. Условие статуса дублируется в updateMany на
+ * случай гонки: если статус успел измениться между выборкой и обновлением,
+ * такая бронь не будет затронута.
+ */
+export async function completeFinishedPrepaidBookings(
+  now: Date = new Date(),
+): Promise<string[]> {
+  const cutoff = new Date(now.getTime() - env.AUTOCOMPLETE_AFTER_MINUTES * 60_000);
+  const finished = await prisma.booking.findMany({
+    where: {
+      status: { in: [...AUTOCOMPLETE_FROM_STATUSES] },
+      endAt: { lte: cutoff },
+    },
+    select: { id: true },
+  });
+  if (finished.length === 0) return [];
+  const ids = finished.map((b) => b.id);
+  await prisma.booking.updateMany({
+    where: { id: { in: ids }, status: { in: [...AUTOCOMPLETE_FROM_STATUSES] } },
+    data: { status: "COMPLETED" },
+  });
+  return ids;
+}

@@ -1,6 +1,7 @@
 import { prisma } from "./db";
 import {
   cancelExpiredBookings,
+  completeFinishedPrepaidBookings,
   findExpiringPendingBookings,
   findExpiringPendingGroups,
 } from "./booking-service";
@@ -57,6 +58,17 @@ export function startScheduler() {
       }
     } catch (e) {
       logSchedulerError("cancel", e);
+    }
+    try {
+      // Авто-закрытие завершённых оплаченных броней (endAt + 4 ч) в COMPLETED.
+      const completedIds = await completeFinishedPrepaidBookings();
+      if (completedIds.length > 0) {
+        console.log(
+          `[scheduler] auto-completed ${completedIds.length} finished prepaid bookings`,
+        );
+      }
+    } catch (e) {
+      logSchedulerError("auto-complete", e);
     }
   }, 60_000);
 

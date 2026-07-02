@@ -9,30 +9,21 @@ import { Button } from "@/components/ui/button";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { cn } from "@/lib/utils";
 
-const PATH = "/admin/bookings";
+const PATH = "/admin/blocks";
 
 type CategoryOption = { id: string; name: string };
 type TypeOption = { id: string; name: string; categoryName: string; categoryId: string };
 type ObjectOption = { id: string; name: string; typeId: string; categoryId: string };
 
-const STATUS_SEGMENTS: { value: string; label: string }[] = [
-  { value: "", label: "Все" },
-  { value: "PENDING", label: "Ожидают" },
-  { value: "PREPAID", label: "Аванс внесён" },
-  { value: "PAID", label: "Оплачены" },
-  { value: "CANCELLED", label: "Отменены" },
-  { value: "COMPLETED", label: "Завершены" },
-];
-
 const DATE_FIELD_SEGMENTS: { value: string; label: string }[] = [
-  { value: "start", label: "Дата брони" },
+  { value: "start", label: "Дата блокировки" },
   { value: "created", label: "Дата создания" },
 ];
 
-// Ключи, которые сбрасываются «Сбросить всё» (sort сохраняется).
-const RESET_KEYS = ["q", "cat", "type", "obj", "from", "to", "dateField", "status"];
+// Ключи, которые сбрасываются «Сбросить всё».
+const RESET_KEYS = ["q", "cat", "type", "obj", "from", "to", "dateField"];
 
-export function BookingsFilters({
+export function BlocksFilters({
   categories,
   types,
   objects,
@@ -42,7 +33,6 @@ export function BookingsFilters({
   types: TypeOption[];
   objects: ObjectOption[];
   current: {
-    status?: string;
     q?: string;
     cats?: string[];
     types?: string[];
@@ -67,11 +57,9 @@ export function BookingsFilters({
   }, [current.q]);
 
   // Копирует текущие параметры, применяет изменения (пустое значение удаляет
-  // ключ), сохраняет sort и прочие параметры, переходит на новый URL.
+  // ключ), переходит на новый URL.
   function setParams(updates: Record<string, string | undefined>) {
     const sp = new URLSearchParams(params.toString());
-    // Любое изменение фильтра возвращает на первую страницу.
-    sp.delete("page");
     for (const [key, value] of Object.entries(updates)) {
       if (value) sp.set(key, value);
       else sp.delete(key);
@@ -153,7 +141,7 @@ export function BookingsFilters({
   }
 
   const activeCount =
-    [current.status, current.q, current.from, current.to].filter(Boolean).length +
+    [current.q, current.from, current.to].filter(Boolean).length +
     (selectedCats.length ? 1 : 0) +
     (selectedTypes.length ? 1 : 0) +
     (selectedObjs.length ? 1 : 0);
@@ -184,7 +172,7 @@ export function BookingsFilters({
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Объект, имя гостя, телефон или код брони"
+            placeholder="Объект или причина блокировки"
             className="pl-9 pr-9"
           />
           {search && (
@@ -277,31 +265,6 @@ export function BookingsFilters({
             onChange={onObjsChange}
             searchable
           />
-        </div>
-      </div>
-
-      {/* Статус оплаты (сегмент) */}
-      <div className="space-y-1.5">
-        <Label className="text-xs">Статус оплаты</Label>
-        <div className="flex flex-wrap gap-1.5">
-          {STATUS_SEGMENTS.map((s) => {
-            const active = (current.status || "") === s.value;
-            return (
-              <button
-                key={s.value || "all"}
-                type="button"
-                onClick={() => setParams({ status: s.value || undefined })}
-                className={cn(
-                  "px-3 py-1.5 rounded-md text-sm border transition-colors",
-                  active
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "bg-background text-muted-foreground border-input hover:bg-slate-50",
-                )}
-              >
-                {s.label}
-              </button>
-            );
-          })}
         </div>
       </div>
     </div>

@@ -11,6 +11,10 @@ const schema = z.object({
   PAYMENT_TIMEOUT_MINUTES: z.coerce.number().int().positive().default(15),
   // За сколько минут до авто-отмены слать напоминание со ссылкой на оплату.
   PAYMENT_REMINDER_BEFORE_MINUTES: z.coerce.number().int().positive().default(5),
+  // Через сколько минут после окончания брони (endAt) авто-закрывать её как
+  // COMPLETED, если бронь оплачена (статус PREPAID или PAID) и другой статус
+  // не выставлен.
+  AUTOCOMPLETE_AFTER_MINUTES: z.coerce.number().int().positive().default(240),
 
   TINKOFF_TEST_MODE: z
     .string()

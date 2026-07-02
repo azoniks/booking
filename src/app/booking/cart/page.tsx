@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { SiteHeader } from "@/components/client/SiteHeader";
 import { useCart } from "@/components/client/CartProvider";
 import {
   ObjectSchedulePicker,
@@ -94,14 +94,9 @@ export default function CartPage() {
   const empty = items.length === 0;
 
   return (
-    <div className="min-h-screen bg-slate-50 py-6">
-      <div className="container max-w-5xl space-y-4">
-        <Button asChild variant="ghost" size="sm">
-          <Link href="/">
-            <ArrowLeft className="w-4 h-4 mr-1" /> К выбору объектов
-          </Link>
-        </Button>
-
+    <div className="min-h-screen bg-slate-50">
+      <SiteHeader breadcrumbs={[{ label: "Оформление заказа" }]} />
+      <div className="container max-w-5xl py-6 space-y-4">
         <h1 className="text-2xl font-bold tracking-tight">Оформление заказа</h1>
 
         {empty ? (
