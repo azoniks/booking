@@ -7,10 +7,10 @@ import type { DateRange } from "react-day-picker";
 import {
   type BusyInterval,
   dateKey,
-  firstOccupiedNightFrom,
+  isCheckoutValid,
+  isDaySelectable,
   mskDayIndex,
   occupiedNightIndices,
-  rangeHitsOccupiedNight,
 } from "@/lib/day-availability";
 
 export type { BusyInterval };
@@ -46,22 +46,13 @@ export function AvailabilityCalendar({
   };
   const isBooked = (d: Date) => occupied.has(mskDayIndex(d));
 
-  // Валиден ли день как ДАТА ВЫЕЗДА для текущего заезда: строго позже заезда и
-  // период ночей [заезд, выезд) не задевает занятых ночей. Выезд может попасть
-  // ровно на первую занятую ночь (пересменка) — она не входит в [заезд, выезд).
-  const isValidCheckout = (d: Date) => {
-    if (!anchor) return false;
-    const aIdx = mskDayIndex(anchor);
-    const dIdx = mskDayIndex(d);
-    return dIdx > aIdx && !rangeHitsOccupiedNight(aIdx, dIdx, occupied);
-  };
-  // Валиден ли день как ДАТА ЗАЕЗДА: это свободная ночь.
-  const isValidCheckin = (d: Date) => !isBooked(d);
+  const anchorIdx = anchor ? mskDayIndex(anchor) : null;
 
   // День кликабелен, если он годится как выезд для текущего заезда ИЛИ как новый
   // заезд. Так занятая ночь чужой брони доступна как дата выезда (пересменка), но
   // при этом всегда можно начать новый выбор на любой свободной дате.
-  const isDisabled = (d: Date) => isPast(d) || !(isValidCheckout(d) || isValidCheckin(d));
+  const isDisabled = (d: Date) =>
+    isPast(d) || !isDaySelectable(anchorIdx, mskDayIndex(d), occupied);
 
   // День внутри выбранного диапазона [from, to] — чтобы зелёная заливка
   // «available» не перебивала фон выделения range_middle/range_end.
@@ -87,7 +78,7 @@ export function AvailabilityCalendar({
   //  • клик не позже заезда → перезапуск с новой даты заезда.
   function handleDayClick(clicked: Date) {
     // Продлеваем период, только если клик — валидный выезд для текущего заезда.
-    if (anchor && isValidCheckout(clicked)) {
+    if (anchor && isCheckoutValid(anchorIdx, mskDayIndex(clicked), occupied)) {
       onChange({ from: anchor, to: clicked });
       setAnchor(null);
       return;

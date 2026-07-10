@@ -87,3 +87,30 @@ export function rangeHitsOccupiedNight(
   }
   return false;
 }
+
+/**
+ * Годится ли день `dayIdx` как ДАТА ВЫЕЗДА для уже выбранного заезда `anchorIdx`:
+ * строго позже заезда и период ночей [заезд, выезд) свободен. Выезд может попасть
+ * ровно на первую занятую ночь (пересменка) — она не входит в период.
+ */
+export function isCheckoutValid(
+  anchorIdx: number | null,
+  dayIdx: number,
+  occupied: Set<number>,
+): boolean {
+  if (anchorIdx === null) return false;
+  return dayIdx > anchorIdx && !rangeHitsOccupiedNight(anchorIdx, dayIdx, occupied);
+}
+
+/**
+ * Кликабелен ли день в календаре (без учёта «прошедших дней»): он годится либо
+ * как новый ЗАЕЗД (свободная ночь), либо как ВЫЕЗД для текущего заезда. Занятая
+ * ночь чужой брони недоступна как заезд, но доступна как выезд-пересменка.
+ */
+export function isDaySelectable(
+  anchorIdx: number | null,
+  dayIdx: number,
+  occupied: Set<number>,
+): boolean {
+  return !occupied.has(dayIdx) || isCheckoutValid(anchorIdx, dayIdx, occupied);
+}
