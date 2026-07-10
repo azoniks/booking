@@ -1,58 +1,19 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { DayPicker } from "react-day-picker";
 import { ru } from "date-fns/locale";
 import type { DateRange } from "react-day-picker";
+import {
+  type BusyInterval,
+  dateKey,
+  firstOccupiedNightFrom,
+  mskDayIndex,
+  occupiedNightIndices,
+  rangeHitsOccupiedNight,
+} from "@/lib/day-availability";
 
-export type BusyInterval = { kind: "booking" | "block"; startAt: string; endAt: string };
-
-/**
- * Собирает Set дат вида "YYYY-MM-DD" в локальной зоне Europe/Moscow,
- * которые занятые брони перекрывают по «дням ночёвки» (т.е. дата заезда
- * блокируется, дата выезда — не блокируется).
- */
-function collectOccupiedDays(intervals: BusyInterval[], cleaningMinutes: number): Set<string> {
-  const out = new Set<string>();
-  // d * 86_400_000 уже соответствует UTC-полуночи нужного дня MSK-индекса —
-  // сдвигать ещё на TZ_OFFSET_MIN не нужно, иначе getUTCDate() уезжает на
-  // сутки назад и ключ Set-а перестаёт совпадать с dateKey() в isDisabled.
-  const fmt = (dayIdx: number): string => {
-    const dt = new Date(dayIdx * 86_400_000);
-    const y = dt.getUTCFullYear();
-    const m = String(dt.getUTCMonth() + 1).padStart(2, "0");
-    const day = String(dt.getUTCDate()).padStart(2, "0");
-    return `${y}-${m}-${day}`;
-  };
-  for (const iv of intervals) {
-    const start = new Date(iv.startAt);
-    const end = new Date(new Date(iv.endAt).getTime() - cleaningMinutes * 60_000);
-    const TZ_OFFSET_MIN = 180;
-    const startMs = start.getTime() + TZ_OFFSET_MIN * 60_000;
-    const endMs = end.getTime() + TZ_OFFSET_MIN * 60_000;
-    const startDay = Math.floor(startMs / 86_400_000);
-    // Ceil вернул бы +1 для любого endAt НЕ в полночь и блокировал бы
-    // лишние сутки (день выезда). Используем floor: занимаем до дня выезда
-    // ИСКЛЮЧИТЕЛЬНО — в этот день уже можно заехать новой брони.
-    const endDay = Math.floor(endMs / 86_400_000);
-    for (let d = startDay; d < endDay; d++) {
-      out.add(fmt(d));
-    }
-    // Если бронь короче суток (start и end в один день) — всё равно
-    // пометим день брони занятым, чтобы он не оставался выбираемым.
-    if (startDay === endDay) {
-      out.add(fmt(startDay));
-    }
-  }
-  return out;
-}
-
-function dateKey(d: Date): string {
-  // Europe/Moscow tz key
-  const TZ_OFFSET_MIN = 180;
-  const local = new Date(d.getTime() + TZ_OFFSET_MIN * 60_000);
-  return `${local.getUTCFullYear()}-${String(local.getUTCMonth() + 1).padStart(2, "0")}-${String(local.getUTCDate()).padStart(2, "0")}`;
-}
+export type { BusyInterval };
 
 export function AvailabilityCalendar({
   busy,
@@ -65,18 +26,43 @@ export function AvailabilityCalendar({
   range: DateRange | undefined;
   onChange: (range: DateRange | undefined) => void;
 }) {
+  // Индексы занятых НОЧЕЙ. День выезда чужой брони сюда не входит — в него можно
+  // заехать; день заезда чужой брони входит — но его можно выбрать как дату
+  // выезда новой брони (пересменка), см. disabled ниже.
   const occupied = useMemo(
-    () => collectOccupiedDays(busy, cleaningMinutes),
+    () => occupiedNightIndices(busy, cleaningMinutes),
     [busy, cleaningMinutes],
   );
+
+  // Дата заезда текущего незавершённого выбора. Пока задана — календарь в «фазе
+  // выезда»: следующий клик по более поздней дате замыкает период. null — «фаза
+  // заезда»: следующий клик начинает новый выбор с одной ночи.
+  const [anchor, setAnchor] = useState<Date | null>(null);
 
   const isPast = (d: Date) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     return d < today;
   };
-  const isBooked = (d: Date) => occupied.has(dateKey(d));
-  const isDisabled = (d: Date) => isPast(d) || isBooked(d);
+  const isBooked = (d: Date) => occupied.has(mskDayIndex(d));
+
+  // Валиден ли день как ДАТА ВЫЕЗДА для текущего заезда: строго позже заезда и
+  // период ночей [заезд, выезд) не задевает занятых ночей. Выезд может попасть
+  // ровно на первую занятую ночь (пересменка) — она не входит в [заезд, выезд).
+  const isValidCheckout = (d: Date) => {
+    if (!anchor) return false;
+    const aIdx = mskDayIndex(anchor);
+    const dIdx = mskDayIndex(d);
+    return dIdx > aIdx && !rangeHitsOccupiedNight(aIdx, dIdx, occupied);
+  };
+  // Валиден ли день как ДАТА ЗАЕЗДА: это свободная ночь.
+  const isValidCheckin = (d: Date) => !isBooked(d);
+
+  // День кликабелен, если он годится как выезд для текущего заезда ИЛИ как новый
+  // заезд. Так занятая ночь чужой брони доступна как дата выезда (пересменка), но
+  // при этом всегда можно начать новый выбор на любой свободной дате.
+  const isDisabled = (d: Date) => isPast(d) || !(isValidCheckout(d) || isValidCheckin(d));
+
   // День внутри выбранного диапазона [from, to] — чтобы зелёная заливка
   // «available» не перебивала фон выделения range_middle/range_end.
   const isInRange = (d: Date) => {
@@ -86,33 +72,30 @@ export function AvailabilityCalendar({
     const to = (range.to ?? range.from).getTime();
     return t >= from && t <= to;
   };
-  // Свободный день: не прошёл, не занят и не входит в выбранный диапазон —
-  // помечаем зелёным.
   const isAvailable = (d: Date) => !isPast(d) && !isBooked(d) && !isInRange(d);
 
-  function sameDay(a: Date, b: Date) {
-    return (
-      a.getFullYear() === b.getFullYear() &&
-      a.getMonth() === b.getMonth() &&
-      a.getDate() === b.getDate()
-    );
+  function addDay(d: Date): Date {
+    const next = new Date(d);
+    next.setDate(next.getDate() + 1);
+    return next;
   }
 
-  // Один клик = одна ночь (выезд утром следующего дня). Второй клик по
-  // другой дате расширяет диапазон до периода — это поведение DayPicker
-  // mode="range" «из коробки», resetOnSelect специально не включаем.
-  function handleSelect(next: DateRange | undefined) {
-    if (!next?.from) {
-      onChange(next);
+  // Ведём выбор сами по кликнутой дате (triggerDate из onSelect), не полагаясь на
+  // внутреннюю логику диапазона DayPicker. Сохраняем UX «1 клик = 1 ночь»:
+  //  • нет заезда → ставим заезд и показываем 1 ночь;
+  //  • клик позже заезда → замыкаем период (выезд = клик);
+  //  • клик не позже заезда → перезапуск с новой даты заезда.
+  function handleDayClick(clicked: Date) {
+    // Продлеваем период, только если клик — валидный выезд для текущего заезда.
+    if (anchor && isValidCheckout(clicked)) {
+      onChange({ from: anchor, to: clicked });
+      setAnchor(null);
       return;
     }
-    if (!next.to || sameDay(next.from, next.to)) {
-      const to = new Date(next.from);
-      to.setDate(to.getDate() + 1);
-      onChange({ from: next.from, to });
-      return;
-    }
-    onChange(next);
+    // Иначе начинаем новый выбор с одной ночи (день заведомо годен как заезд —
+    // disabled не пропустил бы сюда занятую ночь).
+    setAnchor(clicked);
+    onChange({ from: clicked, to: addDay(clicked) });
   }
 
   return (
@@ -121,7 +104,7 @@ export function AvailabilityCalendar({
         <DayPicker
           mode="range"
           selected={range}
-          onSelect={handleSelect}
+          onSelect={(_range, triggerDate) => handleDayClick(triggerDate)}
           disabled={isDisabled}
           // Отдельные модификаторы, чтобы развести стили: «прошлое» — серым,
           // «занято» — красным. Сами по себе модификаторы клик не блокируют,
@@ -132,10 +115,6 @@ export function AvailabilityCalendar({
             past: "text-muted-foreground line-through opacity-50",
             available: "bg-emerald-50 text-emerald-700 hover:bg-emerald-100",
           }}
-          // excludeDisabled: если новый диапазон перекрывает занятый день —
-          // DayPicker сам сбрасывает «to» и оставляет триггер-дату как «from»,
-          // которую handleSelect ниже превратит в 1-ночную бронь.
-          excludeDisabled
           locale={ru}
           weekStartsOn={1}
           showOutsideDays={false}
@@ -191,7 +170,7 @@ export function SingleDayPicker({
   };
 }) {
   const occupied = useMemo(
-    () => collectOccupiedDays(busy, cleaningMinutes),
+    () => occupiedNightIndices(busy, cleaningMinutes),
     [busy, cleaningMinutes],
   );
 
@@ -217,7 +196,7 @@ export function SingleDayPicker({
       if (sectionsInfo.needed === sectionsInfo.total && occ.sectionsUsed > 0) return true;
       return occ.sectionsUsed + sectionsInfo.needed > sectionsInfo.total;
     }
-    return occupied.has(dateKey(d));
+    return occupied.has(mskDayIndex(d));
   };
   const isDisabled = (d: Date) => isPast(d) || isBooked(d);
   // Свободный день: не прошёл и не занят — помечаем зелёным.
