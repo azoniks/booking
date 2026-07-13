@@ -1,5 +1,4 @@
 import { createHash, createHmac } from "node:crypto";
-import { Prisma } from "@prisma/client";
 import { prisma } from "./db";
 import { env } from "./env";
 
@@ -407,41 +406,45 @@ export async function verifyTinkoffWebhook(
 // Помечает успешную оплату: payment=SUCCEEDED и все связанные брони PREPAID
 // (онлайн оплачивается только предоплата → «аванс внесён»; полную оплату
 // менеджер подтверждает вручную). Одиночную бронь ИЛИ всю группу — атомарно.
+//
+// Возвращает true, только если ЭТОТ вызов реально выполнил переход в успех.
+// Переход захватывается условным UPDATE (status != SUCCEEDED) внутри
+// транзакции: при гонке нескольких вебхуков Tinkoff (AUTHORIZED, CONFIRMED,
+// ретраи) второй запрос ждёт блокировку строки и после коммита первого видит
+// уже SUCCEEDED → обновляет 0 строк → получает false. Так «первый» ровно один.
 async function settleSuccess(
   payment: { id: string; bookingId: string | null; groupId: string | null },
   rawPayload?: unknown,
-) {
+): Promise<boolean> {
   const now = new Date();
-  const ops: Prisma.PrismaPromise<unknown>[] = [
-    prisma.payment.update({
-      where: { id: payment.id },
+  return prisma.$transaction(async (tx) => {
+    const claim = await tx.payment.updateMany({
+      where: { id: payment.id, status: { not: "SUCCEEDED" } },
       data: {
         status: "SUCCEEDED",
         paidAt: now,
         ...(rawPayload !== undefined ? { rawPayload: rawPayload as object } : {}),
       },
-    }),
-  ];
-  if (payment.groupId) {
-    ops.push(
-      prisma.bookingGroup.update({
+    });
+    if (claim.count === 0) return false; // переход уже сделал другой вызов
+
+    if (payment.groupId) {
+      await tx.bookingGroup.update({
         where: { id: payment.groupId },
         data: { status: "PREPAID", paidAt: now },
-      }),
-      prisma.booking.updateMany({
+      });
+      await tx.booking.updateMany({
         where: { groupId: payment.groupId, status: "PENDING" },
         data: { status: "PREPAID", paidAt: now },
-      }),
-    );
-  } else if (payment.bookingId) {
-    ops.push(
-      prisma.booking.update({
+      });
+    } else if (payment.bookingId) {
+      await tx.booking.update({
         where: { id: payment.bookingId },
         data: { status: "PREPAID", paidAt: now },
-      }),
-    );
-  }
-  await prisma.$transaction(ops);
+      });
+    }
+    return true;
+  });
 }
 
 export async function applyPaymentResult(args: {
@@ -455,20 +458,19 @@ export async function applyPaymentResult(args: {
   if (!payment) return null;
 
   // Tinkoff может прислать несколько вебхуков по одному платежу (AUTHORIZED,
-  // затем CONFIRMED, плюс ретраи). Обрабатываем переход в успех ОДИН раз —
-  // иначе дублируются уведомления, а повторный settle мог бы откатить уже
-  // PAID-бронь обратно в PREPAID.
-  const alreadySucceeded = payment.status === "SUCCEEDED";
-
+  // затем CONFIRMED, плюс ретраи), которые обрабатываются параллельно.
+  // Переход в успех делаем ровно один раз — атомарно внутри settleSuccess
+  // (иначе дублируются уведомления, а повторный settle мог бы откатить уже
+  // PAID-бронь обратно в PREPAID).
+  let firstSettle = false;
   if (args.succeeded) {
-    if (!alreadySucceeded) {
-      await settleSuccess(payment, args.rawPayload);
-    }
-  } else if (!alreadySucceeded) {
+    firstSettle = await settleSuccess(payment, args.rawPayload);
+  } else {
     // Неуспех по вебхуку: помечаем только платёж (бронь остаётся PENDING — клиент
-    // может повторить оплату). Уже успешный платёж неуспехом НЕ затираем.
-    await prisma.payment.update({
-      where: { id: payment.id },
+    // может повторить оплату). Уже успешный платёж неуспехом НЕ затираем —
+    // условие status != SUCCEEDED делает это атомарно.
+    await prisma.payment.updateMany({
+      where: { id: payment.id, status: { not: "SUCCEEDED" } },
       data: { status: "FAILED", rawPayload: args.rawPayload as object },
     });
   }
@@ -478,7 +480,7 @@ export async function applyPaymentResult(args: {
     bookingId: payment.bookingId,
     groupId: payment.groupId,
     succeeded: args.succeeded,
-    firstSettle: args.succeeded && !alreadySucceeded,
+    firstSettle,
   };
 }
 
