@@ -197,6 +197,14 @@ export async function sendNewBookingNotifications(bookingId: string) {
   });
   if (!b) return;
 
+  // Идемпотентность: если уведомление о новой брони уже уходило — не повторяем.
+  // Нужно как для повторных вызовов, так и для фолбэка из sendPaidNotifications
+  // (уведомление о создании — fire-and-forget и могло молча не отправиться).
+  const already = await prisma.notificationLog.count({
+    where: { bookingId, kind: "admin_new_booking", status: "sent" },
+  });
+  if (already > 0) return;
+
   // Гостю — после оплаты, не сразу. Здесь только админу.
   const admins = await getAdminEmails();
   const total = Number(b.totalPrice);
@@ -251,6 +259,11 @@ export async function sendPaidNotifications(bookingId: string) {
     where: { bookingId, kind: { in: ["guest_paid", "admin_paid"] }, status: "sent" },
   });
   if (alreadyPaidNotified > 0) return;
+
+  // Фолбэк: гарантируем, что уведомление о НОВОЙ броне ушло раньше уведомления
+  // об оплате (при создании оно fire-and-forget и могло молча упасть — тогда
+  // админ видел «оплату» без «новой брони»). Идемпотентно — если уже было, no-op.
+  await sendNewBookingNotifications(bookingId).catch(() => {});
 
   const remaining = Number(b.totalPrice) - Number(b.prepaymentAmount);
   const guestLines = [
@@ -362,6 +375,15 @@ export async function sendNewBookingGroupNotifications(groupId: string) {
   const g = await loadGroup(groupId);
   if (!g) return;
 
+  // Идемпотентность (по первой броне заказа) — как для одиночной брони.
+  const firstId = g.bookings[0]?.id;
+  if (firstId) {
+    const already = await prisma.notificationLog.count({
+      where: { bookingId: firstId, kind: "admin_new_group", status: "sent" },
+    });
+    if (already > 0) return;
+  }
+
   const total = Number(g.totalPrice);
   const prepay = Number(g.prepaymentAmount);
   const remaining = Math.max(0, total - prepay);
@@ -417,6 +439,9 @@ export async function sendPaidGroupNotifications(groupId: string) {
     });
     if (alreadyPaidNotified > 0) return;
   }
+
+  // Фолбэк: гарантируем уведомление о новом заказе перед уведомлением об оплате.
+  await sendNewBookingGroupNotifications(groupId).catch(() => {});
 
   const total = Number(g.totalPrice);
   const prepay = Number(g.prepaymentAmount);
