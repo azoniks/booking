@@ -57,6 +57,49 @@ async function seedHourlyObject(opts: { cleaningMinutes?: number } = {}) {
   return obj;
 }
 
+async function seedHourlySlotObject() {
+  const cat = await testDb.category.create({
+    data: {
+      name: "Рыбалка",
+      slug: `fishing-${Date.now()}`,
+      bookingMode: "HOURLY",
+    },
+  });
+  const t = await testDb.objectType.create({
+    data: {
+      categoryId: cat.id,
+      name: "Рыболовное место",
+      hourlyStepMinutes: 60,
+      workingHoursStart: "07:00",
+      workingHoursEnd: "19:00",
+      cleaningMinutes: 0,
+      baseCapacity: 2,
+      maxCapacity: 4,
+      basePrice: 208.33,
+      extraGuestPrice: 100,
+      minBookingHours: 1,
+      slots: {
+        create: {
+          name: "День",
+          startTime: "07:00",
+          endTime: "19:00",
+          endDayOffset: 0,
+          priceOverride: 2500,
+        },
+      },
+    },
+    include: { slots: true },
+  });
+  const obj = await testDb.bookingObject.create({
+    data: {
+      objectTypeId: t.id,
+      name: "Мостик №1",
+      slug: `bridge-1-${Date.now()}`,
+    },
+  });
+  return { obj, slot: t.slots[0] };
+}
+
 async function seedDailyRoom() {
   const cat = await testDb.category.create({
     data: {
@@ -95,6 +138,47 @@ const guest = {
 };
 
 describe("createBooking — HOURLY", () => {
+  it("для слота использует фиксированную цену, а не почасовой расчёт", async () => {
+    const { obj, slot } = await seedHourlySlotObject();
+    const b = await createBooking({
+      objectId: obj.id,
+      slotId: slot.id,
+      slotDate: "2026-07-01",
+      guestsCount: 2,
+      ...guest,
+    });
+    expect(b.basePrice.toString()).toBe("2500");
+    expect(b.extraGuestsCost.toString()).toBe("0");
+    expect(b.totalPrice.toString()).toBe("2500");
+  });
+
+  it("для слота начисляет доплату за гостей один раз, без умножения на часы", async () => {
+    const { obj, slot } = await seedHourlySlotObject();
+    const b = await createBooking({
+      objectId: obj.id,
+      slotId: slot.id,
+      slotDate: "2026-07-01",
+      guestsCount: 4,
+      ...guest,
+    });
+    expect(b.extraGuests).toBe(2);
+    expect(b.extraGuestsCost.toString()).toBe("200");
+    expect(b.totalPrice.toString()).toBe("2700");
+  });
+
+  it("запрещает произвольный интервал, если у типа настроены слоты", async () => {
+    const { obj } = await seedHourlySlotObject();
+    await expect(
+      createBooking({
+        objectId: obj.id,
+        startAt: "2026-07-01T07:00:00Z",
+        endAt: "2026-07-02T07:00:00Z",
+        guestsCount: 4,
+        ...guest,
+      }),
+    ).rejects.toThrow("необходимо выбрать слот");
+  });
+
   it("создаёт первую бронь", async () => {
     const obj = await seedHourlyObject();
     const b = await createBooking({
