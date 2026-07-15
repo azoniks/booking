@@ -109,6 +109,13 @@ async function prepareBooking(args: BookingScheduleArgs): Promise<PreparedBookin
   const t = obj.objectType;
   const mode = t.category.bookingMode;
 
+  // Если для почасового типа настроены слоты, интервал должен определяться
+  // только выбранным слотом. Проверяем это на сервере, чтобы произвольные
+  // startAt/endAt нельзя было передать в обход клиентской или админской формы.
+  if (mode === "HOURLY" && t.slots.length > 0 && !args.slotId) {
+    throw new Error("Для этого объекта необходимо выбрать слот");
+  }
+
   let startAt: Date, endAt: Date;
   let slotPriceOverride: number | null = null;
 
