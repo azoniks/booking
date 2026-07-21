@@ -12,6 +12,15 @@ booking.example.ru {
         max_size 220MB
     }
 
+    # Автономный виджет интерактивной карты для встраивания в Tilda.
+    # Отдаём напрямую, чтобы обновление карты не зависело от сборки Next.js.
+    handle_path /map-widget/* {
+        root * /srv/booking/public/map-widget
+        file_server
+        header Cache-Control "public, max-age=3600"
+        header Content-Security-Policy "frame-ancestors 'self' https://bazaklondaik.ru https://www.bazaklondaik.ru https://*.tilda.ws https://*.tilda.cc"
+    }
+
     # Загруженные клиентами файлы (фото объектов и т.п.) отдаём напрямую
     # с диска. Next.js в production обслуживает только те файлы из public/,
     # которые были на момент `next build` — runtime-загрузки он игнорирует,
@@ -39,10 +48,12 @@ booking.example.ru {
     }
 
     # Безопасные заголовки
+    @notMapWidget not path /map-widget/*
+    header @notMapWidget X-Frame-Options "SAMEORIGIN"
+
     header {
         Strict-Transport-Security "max-age=31536000; includeSubDomains"
         X-Content-Type-Options "nosniff"
-        X-Frame-Options "SAMEORIGIN"
         Referrer-Policy "strict-origin-when-cross-origin"
     }
 

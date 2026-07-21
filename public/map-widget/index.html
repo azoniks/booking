@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <title>Карта базы отдыха «Клондайк»</title>
+  <link rel="stylesheet" href="styles.css?v=3">
+</head>
+<body>
+  <main class="map-app">
+    <header class="map-head">
+      <div><span class="eyebrow">БАЗА ОТДЫХА «КЛОНДАЙК»</span><h1>Карта территории</h1><p>Выберите объект на схеме, чтобы посмотреть описание и перейти к бронированию.</p></div>
+      <a class="booking-link" href="https://booking.bazaklondaik.ru/" target="_blank" rel="noopener">Все варианты <span>→</span></a>
+    </header>
+
+    <nav class="filters" id="filters" aria-label="Фильтр объектов">
+      <button class="filter active" data-filter="all">Все объекты</button>
+      <button class="filter" data-filter="room">Номера</button>
+      <button class="filter" data-filter="bridge">Мостики</button>
+      <button class="filter" data-filter="gazebo">Беседки</button>
+      <button class="filter" data-filter="leisure">Отдых и развлечения</button>
+      <button class="filter" data-filter="nature">Природа</button>
+      <button class="filter" data-filter="service">Инфраструктура</button>
+    </nav>
+
+    <section class="map-shell">
+      <div class="map-toolbar">
+        <button id="zoomIn" aria-label="Приблизить">+</button>
+        <button id="zoomOut" aria-label="Отдалить">−</button>
+        <button id="resetView" aria-label="Показать всю карту">⌂</button>
+      </div>
+      <div class="map-hint">Перетаскивайте карту · используйте колесо для масштаба</div>
+      <div class="viewport" id="viewport">
+        <div class="map-stage" id="mapStage">
+          <img src="assets/klondaik-map-modern-ai.webp?v=1" alt="Современная карта базы отдыха Клондайк" draggable="false">
+          <div id="markers"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="backdrop" id="backdrop"></div>
+  <aside class="object-card" id="objectCard" aria-live="polite">
+    <button class="card-close" id="cardClose" aria-label="Закрыть">×</button>
+    <div class="card-photo"><img id="cardImage" alt=""><span id="cardType"></span></div>
+    <div class="card-body">
+      <div class="card-number" id="cardNumber"></div>
+      <h2 id="cardTitle"></h2>
+      <div class="facts" id="cardFacts"></div>
+      <p id="cardDescription"></p>
+      <a id="cardBooking" class="card-booking" target="_blank" rel="noopener">Подробнее и бронирование <span>→</span></a>
+      <div id="cardInfoOnly" class="card-info-only" hidden>Информационный объект</div>
+    </div>
+  </aside>
+  <script src="app.js?v=5"></script>
+</body>
+</html>
