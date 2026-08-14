@@ -76,6 +76,33 @@ export interface TinkoffConfig {
 }
 
 const DEFAULT_API_URL = "https://securepay.tinkoff.ru/v2";
+const PAYMENT_REQUEST_TIMEOUT_MS = 15_000;
+
+export class PaymentProviderError extends Error {
+  constructor(message = "Платёжный сервис временно недоступен. Попробуйте ещё раз позже.") {
+    super(message);
+    this.name = "PaymentProviderError";
+  }
+}
+
+function errorDetails(error: unknown): Record<string, unknown> {
+  if (!(error instanceof Error)) return { value: String(error) };
+
+  const cause = error.cause;
+  return {
+    name: error.name,
+    message: error.message,
+    ...(cause instanceof Error
+      ? {
+          cause: {
+            name: cause.name,
+            message: cause.message,
+            ...("code" in cause ? { code: cause.code } : {}),
+          },
+        }
+      : {}),
+  };
+}
 
 async function loadSetting(key: string): Promise<string | null> {
   const s = await prisma.settings.findUnique({ where: { key } });
@@ -248,15 +275,48 @@ export async function initPayment(bookingId: string): Promise<{
   // формировании подписи), поэтому добавляем его в тело уже после signTinkoff.
   const Receipt = buildReceipt(booking, amountKopecks);
 
-  const res = await fetch(`${cfg.apiUrl}/Init`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ...params, Token, Receipt }),
-  });
-  const data = (await res.json()) as TinkoffInitResponse;
+  let res: Response;
+  try {
+    res = await fetch(`${cfg.apiUrl}/Init`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...params, Token, Receipt }),
+      signal: AbortSignal.timeout(PAYMENT_REQUEST_TIMEOUT_MS),
+    });
+  } catch (error) {
+    console.error("[tinkoff init] network request failed", {
+      apiUrl: cfg.apiUrl,
+      mode: cfg.mode,
+      bookingId,
+      error: errorDetails(error),
+    });
+    throw new PaymentProviderError();
+  }
 
-  if (!data.Success || !data.PaymentURL || !data.PaymentId) {
-    throw new Error(`Tinkoff Init failed: ${data.Message || data.ErrorCode}`);
+  let data: TinkoffInitResponse;
+  try {
+    data = (await res.json()) as TinkoffInitResponse;
+  } catch (error) {
+    console.error("[tinkoff init] invalid response", {
+      apiUrl: cfg.apiUrl,
+      mode: cfg.mode,
+      bookingId,
+      status: res.status,
+      error: errorDetails(error),
+    });
+    throw new PaymentProviderError();
+  }
+
+  if (!res.ok || !data.Success || !data.PaymentURL || !data.PaymentId) {
+    console.error("[tinkoff init] provider rejected request", {
+      apiUrl: cfg.apiUrl,
+      mode: cfg.mode,
+      bookingId,
+      status: res.status,
+      errorCode: data.ErrorCode,
+      message: data.Message,
+    });
+    throw new PaymentProviderError();
   }
 
   await prisma.payment.upsert({

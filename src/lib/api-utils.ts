@@ -21,6 +21,9 @@ export function handleError(err: unknown) {
     if (err.name === "ObjectNotAvailableError") {
       return fail(err.message, 410);
     }
+    if (err.name === "PaymentProviderError") {
+      return fail(err.message, 502);
+    }
     return fail(err.message, 400);
   }
   return fail("Внутренняя ошибка", 500);
