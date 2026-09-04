@@ -252,14 +252,13 @@ export function ObjectTypesManager({
                       {t.bookingMode === "DAILY" ? (
                         <div>Заезд {t.checkInTime} → выезд {t.checkOutTime}</div>
                       ) : t.bookingMode === "FULL_DAY" ? (
-                        <div>Весь день: {t.workingHoursStart}–{t.workingHoursEnd}</div>
+                        <div>Режим: {t.workingHoursText || "—"}</div>
                       ) : (
                         <div>
-                          Шаг {t.hourlyStepMinutes} мин · {t.workingHoursStart}–{t.workingHoursEnd} ·
+                          Шаг {t.hourlyStepMinutes} мин · режим: {t.workingHoursText || "—"} ·
                           мин {t.minBookingHours}ч{t.maxBookingHours ? ` / макс ${t.maxBookingHours}ч` : ""}
                         </div>
                       )}
-                      {t.workingHoursText ? <div>Режим: {t.workingHoursText}</div> : null}
                       <div>
                         Уборка {t.cleaningMinutes} мин · вместимость {t.baseCapacity}/{t.maxCapacity} ·
                         цена {t.basePrice} ₽ + {t.extraGuestPrice} ₽/допместо

@@ -48,21 +48,9 @@ export default async function BookingPage({ params }: { params: Promise<{ object
       text: `заезд ${t.checkInTime}, выезд ${t.checkOutTime}`,
     });
   } else if (mode === "FULL_DAY") {
-    facts.push({
-      icon: <Clock className="w-4 h-4" />,
-      text:
-        t.workingHoursStart && t.workingHoursEnd
-          ? `весь день: ${t.workingHoursStart}–${t.workingHoursEnd}`
-          : "весь день",
-    });
+    if (t.workingHoursText) facts.push({ icon: <Clock className="w-4 h-4" />, text: t.workingHoursText });
   } else {
-    facts.push({
-      icon: <Clock className="w-4 h-4" />,
-      text:
-        t.workingHoursStart && t.workingHoursEnd
-          ? `${t.workingHoursStart}–${t.workingHoursEnd}`
-          : "круглосуточно",
-    });
+    if (t.workingHoursText) facts.push({ icon: <Clock className="w-4 h-4" />, text: t.workingHoursText });
     if (t.minBookingHours) {
       facts.push({
         icon: <Sparkles className="w-4 h-4" />,

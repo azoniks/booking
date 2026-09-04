@@ -17,6 +17,7 @@ export type ObjectType = {
   hourlyStepMinutes: number | null;
   workingHoursStart: string | null;
   workingHoursEnd: string | null;
+  workingHoursText: string | null;
   minBookingHours: number | null;
   maxBookingHours: number | null;
   cleaningMinutes: number;
@@ -155,13 +156,7 @@ function TypeSection({
       text: `заезд ${t.checkInTime}, выезд ${t.checkOutTime}`,
     });
   } else if (bookingMode === "FULL_DAY") {
-    meta.push({
-      icon: <Clock className="w-4 h-4" />,
-      text:
-        t.workingHoursStart && t.workingHoursEnd
-          ? `весь день: ${t.workingHoursStart}–${t.workingHoursEnd}`
-          : "весь день",
-    });
+    if (t.workingHoursText) meta.push({ icon: <Clock className="w-4 h-4" />, text: t.workingHoursText });
     if (t.sections) {
       meta.push({
         icon: <Users className="w-4 h-4" />,
@@ -169,13 +164,7 @@ function TypeSection({
       });
     }
   } else {
-    meta.push({
-      icon: <Clock className="w-4 h-4" />,
-      text:
-        t.workingHoursStart && t.workingHoursEnd
-          ? `${t.workingHoursStart}–${t.workingHoursEnd}`
-          : "круглосуточно",
-    });
+    if (t.workingHoursText) meta.push({ icon: <Clock className="w-4 h-4" />, text: t.workingHoursText });
     if (t.minBookingHours && !t.hasSlots) {
       meta.push({
         icon: <Sparkles className="w-4 h-4" />,

@@ -138,6 +138,7 @@ export async function GET(req: NextRequest) {
       hourlyStepMinutes: t.hourlyStepMinutes,
       workingHoursStart: t.workingHoursStart,
       workingHoursEnd: t.workingHoursEnd,
+      workingHoursText: t.workingHoursText,
       minBookingHours: t.minBookingHours,
       maxBookingHours: t.maxBookingHours,
       baseCapacity: t.baseCapacity,
