@@ -48,6 +48,7 @@ type Type = {
   hourlyStepMinutes: number | null;
   workingHoursStart: string | null;
   workingHoursEnd: string | null;
+  workingHoursText: string | null;
   minBookingHours: number | null;
   maxBookingHours: number | null;
   cleaningMinutes: number;
@@ -141,12 +142,14 @@ export function ObjectTypesManager({
       data.hourlyStepMinutes = null;
       data.workingHoursStart = null;
       data.workingHoursEnd = null;
+      data.workingHoursText = null;
       data.minBookingHours = null;
       data.maxBookingHours = null;
     } else if (mode === "FULL_DAY") {
       // День: только рабочие часы (с/до), всё остальное обнуляем.
       data.workingHoursStart = form.get("workingHoursStart") || null;
       data.workingHoursEnd = form.get("workingHoursEnd") || null;
+      data.workingHoursText = form.get("workingHoursText") || null;
       data.checkInTime = null;
       data.checkOutTime = null;
       data.hourlyStepMinutes = null;
@@ -156,6 +159,7 @@ export function ObjectTypesManager({
       data.hourlyStepMinutes = Number(form.get("hourlyStepMinutes") || 60);
       data.workingHoursStart = form.get("workingHoursStart") || null;
       data.workingHoursEnd = form.get("workingHoursEnd") || null;
+      data.workingHoursText = form.get("workingHoursText") || null;
       data.minBookingHours = Number(form.get("minBookingHours") || 1);
       data.maxBookingHours = form.get("maxBookingHours") ? Number(form.get("maxBookingHours")) : null;
       data.checkInTime = null;
@@ -255,6 +259,7 @@ export function ObjectTypesManager({
                           мин {t.minBookingHours}ч{t.maxBookingHours ? ` / макс ${t.maxBookingHours}ч` : ""}
                         </div>
                       )}
+                      {t.workingHoursText ? <div>Режим: {t.workingHoursText}</div> : null}
                       <div>
                         Уборка {t.cleaningMinutes} мин · вместимость {t.baseCapacity}/{t.maxCapacity} ·
                         цена {t.basePrice} ₽ + {t.extraGuestPrice} ₽/допместо
@@ -782,7 +787,10 @@ function TypeForm({
             <Label>Работа до</Label>
             <Input name="workingHoursEnd" defaultValue={initial?.workingHoursEnd ?? "21:00"} placeholder="21:00" />
           </div>
-          <div></div>
+          <div className="md:col-span-2">
+            <Label>Режим работы (текст)</Label>
+            <Input name="workingHoursText" defaultValue={initial?.workingHoursText ?? ""} placeholder="например, 24/7 по слотам" />
+          </div>
         </>
       ) : (
         <>
@@ -797,6 +805,10 @@ function TypeForm({
           <div>
             <Label>Работа до</Label>
             <Input name="workingHoursEnd" defaultValue={initial?.workingHoursEnd ?? "23:00"} placeholder="23:00" />
+          </div>
+          <div className="md:col-span-2">
+            <Label>Режим работы (текст)</Label>
+            <Input name="workingHoursText" defaultValue={initial?.workingHoursText ?? ""} placeholder="например, 24/7 по слотам" />
           </div>
           <div>
             <Label>Мин часов</Label>

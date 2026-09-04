@@ -36,6 +36,7 @@ export default async function ObjectTypesPage() {
           hourlyStepMinutes: t.hourlyStepMinutes,
           workingHoursStart: t.workingHoursStart,
           workingHoursEnd: t.workingHoursEnd,
+          workingHoursText: t.workingHoursText,
           minBookingHours: t.minBookingHours,
           maxBookingHours: t.maxBookingHours,
           cleaningMinutes: t.cleaningMinutes,

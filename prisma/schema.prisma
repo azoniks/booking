@@ -55,6 +55,7 @@ model ObjectType {
   hourlyStepMinutes Int?
   workingHoursStart String? // "09:00"
   workingHoursEnd   String? // "23:00"
+  workingHoursText  String? // произвольное описание режима работы
   minBookingHours   Int?            @default(1)
   maxBookingHours   Int?
   // common:
