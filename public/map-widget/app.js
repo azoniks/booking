@@ -1,3 +1,23 @@
+// Use the live booking page's header markup verbatim so the map never drifts
+// from the main booking site design. The map is served on the same origin.
+(async function copyOriginalHeader(){
+  const current=document.querySelector('header.site-header');
+  if(!current)return;
+  try{
+    const response=await fetch('/',{headers:{'Accept':'text/html'}});
+    if(!response.ok)return;
+    const html=await response.text();
+    const parsed=new DOMParser().parseFromString(html,'text/html');
+    parsed.querySelectorAll('link[rel="stylesheet"]').forEach(link=>{
+      const href=link.getAttribute('href');
+      if(href && !document.querySelector(`link[rel="stylesheet"][href="${href}"]`)){
+        const copy=document.createElement('link'); copy.rel='stylesheet'; copy.href=href; document.head.appendChild(copy);
+      }
+    });
+    const original=parsed.querySelector('header');
+    if(original)current.replaceWith(document.importNode(original,true));
+  }catch(_){/* Keep the static fallback when offline. */}
+})();
 const BOOKING='https://booking.bazaklondaik.ru';
 const bridgeCoords=[[82.3,43.2],[78.4,46.4],[73.7,50.5],[67.1,49.4],[63.3,47.5],[58.8,48.3],[52.1,48.4],[47.9,49.8],[44.8,54.3],[41.5,57.6],[39.6,60.6],[37.5,64.1],[35.4,68.1],[33.3,69.5],[31.1,71.7],[27.7,72.9],[25.4,75.4],[23.1,77.6],[20.7,74.3],[18.1,74.5],[15.2,77.7],[12.9,70.7],[11.3,68.7],[9.9,65.3],[8.3,62.1],[7.0,59.4]];
 const objects=bridgeCoords.map((p,i)=>({id:`bridge-${i+1}`,number:i+1,title:`Мостик №${i+1}`,type:'bridge',typeLabel:'Мостик для рыбалки',x:p[0],y:p[1],image:i+1>=20?`${BOOKING}/uploads/types/cmp5zotow0017l558i6qzbi37/d6d332a8aad1bd37.jpg`:`${BOOKING}/uploads/types/cmoumt8ft000e14elnq59eqcp/efa9d1c11f4b77b6.jpg`,facts:[i+1>=20?'до 10 гостей':'до 5 гостей',i+1>=20?'от 3 000 ₽':'от 2 500 ₽','у воды'],description:i+1>=20?'Расширенный мостик с беседкой для комфортной рыбалки. Размер 6 × 7,5 м.':'Мостик с беседкой для комфортной рыбалки. Размер 6 × 6 м. В тариф включена установленная норма вылова.',url:`${BOOKING}/?cat=bridges`}));
