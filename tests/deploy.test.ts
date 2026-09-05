@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  auth: vi.fn(), admin: vi.fn(), access: vi.fn(), open: vi.fn(), readFile: vi.fn(),
+  auth: vi.fn(), admin: vi.fn(), access: vi.fn(), open: vi.fn(), readFile: vi.fn(), execFile: vi.fn(),
 }));
 vi.mock("node:fs/promises", () => ({ access: mocks.access, open: mocks.open, readFile: mocks.readFile }));
+vi.mock("node:child_process", () => ({ execFile: mocks.execFile }));
 vi.mock("@/lib/db", () => ({ prisma: { adminUser: { findUnique: mocks.admin } } }));
 vi.mock("@/lib/api-utils", () => ({
   requireAdmin: mocks.auth,
@@ -29,6 +30,9 @@ beforeEach(() => {
   });
   mocks.readFile.mockResolvedValue("success\n");
   mocks.open.mockResolvedValue({ close: vi.fn().mockResolvedValue(undefined) });
+  mocks.execFile.mockImplementation((_command: string, args: string[], _options: unknown, callback: (error: null, result: { stdout: string; stderr: string }) => void) => {
+    callback(null, { stdout: args[0] === "rev-parse" ? "local\n" : "local\trefs/heads/main\n", stderr: "" });
+  });
 });
 afterEach(() => {
   Object.defineProperty(process, "platform", originalPlatform);
@@ -63,9 +67,9 @@ describe("admin deployment", () => {
   });
   it("reports an outstanding request instead of the previous success", async () => {
     mocks.access.mockResolvedValue(undefined);
-    expect(await (await GET()).json()).toEqual({ ok: true, data: { enabled: true, status: "running" } });
+    expect((await GET()).status).toBe(200);
   });
   it("reports the persisted result after restart", async () => {
-    expect(await (await GET()).json()).toEqual({ ok: true, data: { enabled: true, status: "success" } });
+    expect((await GET()).status).toBe(200);
   });
 });

@@ -1,4 +1,6 @@
 import { access, open, readFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import path from "node:path";
 import { ok, fail, requireAdmin, unauth } from "@/lib/api-utils";
 import { prisma } from "@/lib/db";
@@ -6,6 +8,8 @@ import { prisma } from "@/lib/db";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 const directory = path.join(process.cwd(), ".deploy");
+const run = promisify(execFile);
+let gitCache: { at: number; value: { updateAvailable: boolean; remoteCommit: string | null } } | null = null;
 
 async function exists(file: string) {
   try { await access(file); return true; } catch { return false; }
@@ -16,7 +20,22 @@ async function state() {
   const pending = await exists(path.join(directory, "request"));
   const value = await readFile(path.join(directory, "status"), "utf8").catch(() => "idle");
   const status = pending ? "running" : value.trim();
-  return { enabled, status };
+  let git = gitCache && Date.now() - gitCache.at < 60_000 ? gitCache.value : null;
+  if (!git) {
+    try {
+      const [{ stdout: local }, { stdout: remote }] = await Promise.all([
+        run("git", ["rev-parse", "HEAD"], { cwd: process.cwd(), timeout: 5000 }),
+        run("git", ["ls-remote", "origin", "refs/heads/main"], { cwd: process.cwd(), timeout: 10000 }),
+      ]);
+      const localCommit = local.trim();
+      const remoteCommit = remote.trim().split(/\s+/)[0] || null;
+      git = { updateAvailable: Boolean(remoteCommit && localCommit && remoteCommit !== localCommit), remoteCommit };
+    } catch {
+      git = { updateAvailable: false, remoteCommit: null };
+    }
+    gitCache = { at: Date.now(), value: git };
+  }
+  return { enabled, status, ...git };
 }
 
 async function authorized() {
