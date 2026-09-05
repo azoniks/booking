@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 const directory = path.join(process.cwd(), ".deploy");
 const run = promisify(execFile);
-let gitCache: { at: number; value: { updateAvailable: boolean; remoteCommit: string | null } } | null = null;
+let gitCache: { at: number; value: { updateAvailable: boolean; currentCommit: string | null; remoteCommit: string | null } } | null = null;
 
 async function exists(file: string) {
   try { await access(file); return true; } catch { return false; }
@@ -29,9 +29,13 @@ async function state() {
       ]);
       const localCommit = local.trim();
       const remoteCommit = remote.trim().split(/\s+/)[0] || null;
-      git = { updateAvailable: Boolean(remoteCommit && localCommit && remoteCommit !== localCommit), remoteCommit };
+      git = {
+        updateAvailable: Boolean(remoteCommit && localCommit && remoteCommit !== localCommit),
+        currentCommit: localCommit ? localCommit.slice(0, 7) : null,
+        remoteCommit: remoteCommit ? remoteCommit.slice(0, 7) : null,
+      };
     } catch {
-      git = { updateAvailable: false, remoteCommit: null };
+      git = { updateAvailable: false, currentCommit: null, remoteCommit: null };
     }
     gitCache = { at: Date.now(), value: git };
   }
