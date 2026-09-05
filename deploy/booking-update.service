@@ -1,0 +1,18 @@
+[Unit]
+Description=Update Hotel Booking from Git
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=booking
+Group=booking
+WorkingDirectory=/srv/booking
+Environment=GIT_TERMINAL_PROMPT=0
+EnvironmentFile=/srv/booking/.env
+ExecStart=/bin/bash /usr/local/lib/booking/run-update.sh
+ExecStartPost=+/usr/bin/systemctl restart booking.service
+ExecStartPost=/bin/sh -c 'echo success > /srv/booking/.deploy/status'
+ExecStopPost=/bin/sh -c 'if [ "$${SERVICE_RESULT}" != success ]; then echo failed > /srv/booking/.deploy/status; fi; rm -f /srv/booking/.deploy/request'
+TimeoutStartSec=30min
+UMask=0077

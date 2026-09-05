@@ -18,3 +18,4 @@ public/uploads/*
 
 coverage
 tsconfig.tsbuildinfo
+.deploy/

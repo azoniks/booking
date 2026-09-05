@@ -263,6 +263,50 @@ rclone config            # настроить remote
 
 ## 13. Обновление версии
 
+В админке: **Настройки → Обновление сайта → Обновить и задеплоить из Git**.
+Кнопка запускает существующий `deploy/update.sh` в отдельном systemd-сервисе,
+затем перезапускает `booking`. Страница проверяет результат каждые 5 секунд.
+Повторный запуск блокируется до завершения. Обновление может временно прервать
+доступ к сайту, поскольку сборка выполняется в рабочем каталоге.
+
+Для включения кнопки один раз установите файлы из этой версии проекта
+на сервере от root (саму версию с кнопкой сначала разверните обычным способом):
+
+```bash
+install -d -o booking -g booking -m 700 /srv/booking/.deploy
+install -d -o root -g root -m 755 /usr/local/lib/booking
+install -o root -g root -m 755 /srv/booking/deploy/update.sh /usr/local/lib/booking/update.sh
+install -o root -g root -m 755 /srv/booking/deploy/run-update.sh /usr/local/lib/booking/run-update.sh
+install -m 644 /srv/booking/deploy/booking-update.service /etc/systemd/system/booking-update.service
+install -m 644 /srv/booking/deploy/booking-update.path /etc/systemd/system/booking-update.path
+systemctl daemon-reload
+systemctl enable --now booking-update.path
+sudo -u booking touch /srv/booking/.deploy/enabled
+```
+
+Git-доступ к `origin/main` должен работать у пользователя `booking` без запроса
+пароля. Скрипт использует `git merge --ff-only`: при расхождении веток он завершится
+с ошибкой без принудительного сброса локальных изменений. Задайте `APP_URL` или
+`AUTH_URL` равным публичному адресу сайта для проверки источника запроса.
+Веб-приложению не нужны sudo-права: оно создаёт только файл запроса, а systemd
+выполняет фиксированную задачу. Скрипты и сборка работают от `booking`; отдельный
+шаг systemd перезапускает только `booking.service` с правами root.
+
+Диагностика:
+
+```bash
+systemctl status booking-update.path booking-update.service
+journalctl -u booking-update.service -n 100
+tail -n 100 /srv/booking/.deploy/update.log
+```
+
+После изменения файлов в `deploy/` повторите их установку. Перед обновлением
+рекомендуется иметь актуальную резервную копию БД: миграции автоматически не
+откатываются при ошибке сборки. При отключении питания файл запроса сохраняется,
+и включённый path-сервис повторит обновление при загрузке сервера.
+
+Ручное обновление:
+
 ```bash
 cd /srv/booking
 sudo -u booking git pull

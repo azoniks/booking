@@ -11,20 +11,17 @@
 # Скрипт можно запускать без sudo, если выполняется от пользователя booking
 # и есть право на restart systemd-сервиса (см. README ниже).
 
-set -e
+set -euo pipefail
 
 APP_DIR="/srv/booking"
 cd "$APP_DIR"
 
 echo "==> Pulling git changes"
-git fetch --all
-git reset --hard origin/main
+git fetch origin main
+git merge --ff-only origin/main
 
-# Если изменился package.json — переустановим зависимости
-if git diff --name-only HEAD@{1} HEAD 2>/dev/null | grep -q "^package\(-lock\)\?\.json$"; then
-  echo "==> package.json changed — npm ci"
-  npm ci --no-audit --no-fund
-fi
+# Устанавливаем зависимости также при повторной попытке после сбоя.
+npm ci --include=dev --no-audit --no-fund
 
 # Если есть новые миграции — накатим
 echo "==> Applying Prisma migrations (no-op if up to date)"
